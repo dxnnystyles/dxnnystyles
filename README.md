@@ -4,7 +4,7 @@
 
 `@dxnnystyles`
 
-Browser-based software · local two-player chess
+A local chess game for two players on one device.
 
 ## About
 
@@ -38,8 +38,8 @@ GitHub generates the contribution activity on my profile for `@dxnnystyles`.
 
 ## Beyond code
 
-Music · [slappywax](#featured-project-slappywax)
+Music: [slappywax](#featured-project-slappywax)
 
 ## Contact / links
 
-[GitHub · @dxnnystyles](https://github.com/dxnnystyles)
+[GitHub profile for @dxnnystyles](https://github.com/dxnnystyles)

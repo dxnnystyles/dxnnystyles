@@ -5,7 +5,7 @@
   <path d="M20 20H980V240H20Z" fill="#24221f" stroke="#554e47" stroke-width="2"/>
   <path d="M42 42H690V218H42Z" fill="#11100f" stroke="#80776d" stroke-width="2"/>
   <text x="76" y="92" fill="#f2eee8" font-family="Georgia, 'Times New Roman', serif" font-size="42">Browser Chess</text>
-  <text x="78" y="132" fill="#b8b0a5" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="19">local · two players · one device</text>
+  <text x="78" y="132" fill="#b8b0a5" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="19">local · two players, one device</text>
   <path d="M78 162H540" stroke="#c45e34" stroke-width="4"/>
   <g transform="translate(760 56)">
     <rect width="144" height="144" fill="#f2eee8"/>
