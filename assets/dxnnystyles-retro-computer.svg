@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 430" role="img" aria-labelledby="title description">
+  <title id="title">Danny Styles — dxnnystyles</title>
+  <desc id="description">A vintage desktop computer in charcoal and warm orange. Its display shows Danny Styles, the dxnnystyles handle, and a chessboard.</desc>
+  <rect width="1200" height="430" fill="#171614"/>
+  <path d="M32 28H1168V402H32Z" fill="none" stroke="#554e47" stroke-width="2"/>
+  <path d="M56 48H1144" stroke="#38332f" stroke-width="1"/>
+  <circle cx="83" cy="74" r="7" fill="#c45e34"/>
+  <path d="M106 74H544" stroke="#554e47" stroke-width="2"/>
+  <text x="64" y="195" fill="#f2eee8" font-family="Georgia, 'Times New Roman', serif" font-size="84" letter-spacing="-2">Danny Styles</text>
+  <text x="68" y="250" fill="#f2eee8" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="29">@dxnnystyles</text>
+  <path d="M68 282H450" stroke="#c45e34" stroke-width="4"/>
+  <text x="68" y="323" fill="#b8b0a5" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="22">Browser Chess · local play</text>
+  <g transform="translate(650 67)">
+    <path d="M26 0H480Q504 0 504 26V254Q504 278 480 278H26Q2 278 2 254V26Q2 0 26 0Z" fill="#38332f" stroke="#80776d" stroke-width="3"/>
+    <path d="M37 20H467Q480 20 480 34V219H24V34Q24 20 37 20Z" fill="#11100f" stroke="#c45e34" stroke-width="3"/>
+    <text x="56" y="70" fill="#f2eee8" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="25">BROWSER CHESS</text>
+    <text x="56" y="105" fill="#b8b0a5" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="17">two players · one device</text>
+    <g transform="translate(326 53)">
+      <rect width="112" height="112" fill="#f2eee8"/>
+      <path d="M28 0V112M56 0V112M84 0V112M0 28H112M0 56H112M0 84H112" stroke="#24221f" stroke-width="14"/>
+      <path d="M14 14H42V42H14ZM70 14H98V42H70ZM42 42H70V70H42ZM14 70H42V98H14ZM70 70H98V98H70Z" fill="#c45e34"/>
+    </g>
+    <path d="M210 278V306H294V278" fill="#554e47" stroke="#80776d" stroke-width="3"/>
+    <path d="M158 307H346L384 336H120Z" fill="#38332f" stroke="#80776d" stroke-width="3"/>
+    <path d="M162 317H338M151 326H350" stroke="#80776d" stroke-width="2"/>
+    <circle cx="455" cy="251" r="5" fill="#c45e34"/>
+    <path d="M25 240H480" stroke="#554e47" stroke-width="2"/>
+  </g>
+  <path d="M56 376H1144" stroke="#38332f" stroke-width="1"/>
+  <path d="M56 376H208" stroke="#c45e34" stroke-width="3"/>
+  <text x="1060" y="390" fill="#b8b0a5" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="14">DS / 01</text>
+</svg>

@@ -10,15 +10,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_SECTIONS = [
-    "01 · Identity",
-    "02 · About",
-    "03 · Currently",
-    "04 · Selected work",
-    "05 · GitHub activity",
-    "06 · Featured project: slappywax",
-    "07 · Chess",
-    "08 · Beyond code",
-    "09 · Contact / links",
+    "Danny Styles",
+    "About",
+    "Currently",
+    "Selected work",
+    "GitHub activity",
+    "Featured project: slappywax",
+    "Chess",
+    "Beyond code",
+    "Contact / links",
 ]
 APPROVED_URLS = {
     "https://github.com/dxnnystyles",
@@ -29,7 +29,8 @@ APPROVED_URLS = {
 ALLOWED_PUBLIC_FILES = {
     ".gitignore",
     "README.md",
-    "assets/dxnnystyles-hero.svg",
+    "assets/dxnnystyles-retro-computer.svg",
+    "assets/browser-chess-preview.svg",
     "scripts/check_readme.py",
 }
 
@@ -48,14 +49,13 @@ def main() -> None:
     sections = re.findall(r"^##\s+(.+?)\s*$", readme, flags=re.MULTILINE)
     if sections != EXPECTED_SECTIONS:
         fail(f"expected the nine approved sections in order; found {sections!r}")
-    for heading in ("08 · Beyond code",):
-        body = re.search(
-            rf"^##\s+{re.escape(heading)}\s*$\n(.*?)(?=^##\s+|\Z)",
-            readme,
-            flags=re.MULTILINE | re.DOTALL,
-        )
-        if body is None or body.group(1).strip():
-            fail(f"pending section must remain free of unverified copy: {heading}")
+    beyond_code = re.search(
+        r"^##\s+Beyond code\s*$\n(.*?)(?=^##\s+|\Z)",
+        readme,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    if beyond_code is None or "#featured-project-slappywax" not in beyond_code.group(1):
+        fail("Beyond code must link only to the approved slappywax section")
 
     markdown_links = re.findall(r"!\[[^\]]*\]\([^)]+\)|(?<!!)\[[^\]]+\]\([^)]+\)", readme)
     if len(markdown_links) != readme.count("]("):
@@ -73,7 +73,9 @@ def main() -> None:
     urls: set[str] = set()
     for image_url, link_url in links:
         target = image_url or link_url
-        if target.startswith("https://"):
+        if target.startswith("#"):
+            continue
+        elif target.startswith("https://"):
             urls.add(target)
         elif target.startswith("http://") or target.startswith(("//", "data:")):
             fail(f"non-HTTPS or embedded destination is not allowed: {target}")
@@ -91,26 +93,35 @@ def main() -> None:
     }
     if actual_files != ALLOWED_PUBLIC_FILES:
         fail(f"public files differ from the reviewed minimal set: {sorted(actual_files ^ ALLOWED_PUBLIC_FILES)!r}")
-    if local_assets != {"assets/dxnnystyles-hero.svg"}:
-        fail(f"unexpected README assets: {sorted(local_assets)!r}")
+    expected_assets = {
+        "assets/dxnnystyles-retro-computer.svg",
+        "assets/browser-chess-preview.svg",
+    }
+    if local_assets != expected_assets:
+        fail(f"unexpected README assets: {sorted(local_assets ^ expected_assets)!r}")
 
-    try:
-        svg = ET.parse(ROOT / "assets/dxnnystyles-hero.svg").getroot()
-    except ET.ParseError as exc:
-        fail(f"hero SVG is invalid XML: {exc}")
     ns = "{http://www.w3.org/2000/svg}"
-    if svg.tag != f"{ns}svg" or svg.get("viewBox") != "0 0 1200 280":
-        fail("hero SVG has an unexpected root or viewBox")
-    if svg.find(f"{ns}title") is None or svg.find(f"{ns}desc") is None:
-        fail("hero SVG needs accessible title and description")
-    for element in svg.iter():
-        for key, value in element.attrib.items():
-            if key.endswith("href") and value.startswith(("http:", "https:")):
-                fail("hero SVG must not depend on remote assets")
+    expected_views = {
+        "assets/dxnnystyles-retro-computer.svg": "0 0 1200 430",
+        "assets/browser-chess-preview.svg": "0 0 1000 260",
+    }
+    for asset, view_box in expected_views.items():
+        try:
+            svg = ET.parse(ROOT / asset).getroot()
+        except ET.ParseError as exc:
+            fail(f"{asset} is invalid XML: {exc}")
+        if svg.tag != f"{ns}svg" or svg.get("viewBox") != view_box:
+            fail(f"{asset} has an unexpected SVG root or viewBox")
+        if svg.find(f"{ns}title") is None or svg.find(f"{ns}desc") is None:
+            fail(f"{asset} needs an accessible title and description")
+        for element in svg.iter():
+            for key, value in element.attrib.items():
+                if key.endswith("href") and value.startswith(("http:", "https:")):
+                    fail(f"{asset} must not depend on remote assets")
 
     print(
         f"PASS: {len(sections)} ordered sections, {len(urls)} approved destinations including the exact slappywax album link, "
-        f"{len(local_assets)} local image, reviewed public file allowlist, and accessible self-contained SVG."
+        f"{len(local_assets)} local images, reviewed public file allowlist, and accessible self-contained SVGs."
     )
 
 
