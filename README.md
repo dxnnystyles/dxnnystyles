@@ -14,7 +14,7 @@ Building a standalone, same-device chess experience for the browser.
 
 ## 04 · Selected work
 
-- [Browser Chess](https://github.com/dxnnystyles/browser-chess) — a local, two-player chess project for the browser; in development.
+- [Browser Chess](https://github.com/dxnnystyles/browser-chess) — a standalone, local two-player chess game for the browser.
 
 ## 05 · GitHub activity
 
@@ -26,7 +26,7 @@ GitHub’s native contribution activity on this profile belongs to `dxnnystyles`
 
 ## 07 · Chess
 
-[Follow Browser Chess](https://github.com/dxnnystyles/browser-chess) as the standalone game takes shape.
+[Play Browser Chess](https://dxnnystyles.github.io/browser-chess/) · [Source code](https://github.com/dxnnystyles/browser-chess)
 
 ## 08 · Beyond code
 

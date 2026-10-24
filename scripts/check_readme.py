@@ -23,6 +23,7 @@ EXPECTED_SECTIONS = [
 APPROVED_URLS = {
     "https://github.com/dxnnystyles",
     "https://github.com/dxnnystyles/browser-chess",
+    "https://dxnnystyles.github.io/browser-chess/",
     "https://open.spotify.com/album/0aLqVmlz4ytvJRcGKW8q4D",
 }
 ALLOWED_PUBLIC_FILES = {
