@@ -22,6 +22,8 @@ GitHub’s native contribution activity on this profile belongs to `dxnnystyles`
 
 ## 06 · Featured project: slappywax
 
+[Danny Styles - slappywax](https://open.spotify.com/album/0aLqVmlz4ytvJRcGKW8q4D)
+
 ## 07 · Chess
 
 [Follow Browser Chess](https://github.com/dxnnystyles/browser-chess) as the standalone game takes shape.

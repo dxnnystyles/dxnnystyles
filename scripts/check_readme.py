@@ -23,6 +23,7 @@ EXPECTED_SECTIONS = [
 APPROVED_URLS = {
     "https://github.com/dxnnystyles",
     "https://github.com/dxnnystyles/browser-chess",
+    "https://open.spotify.com/album/0aLqVmlz4ytvJRcGKW8q4D",
 }
 ALLOWED_PUBLIC_FILES = {
     ".gitignore",
@@ -46,7 +47,7 @@ def main() -> None:
     sections = re.findall(r"^##\s+(.+?)\s*$", readme, flags=re.MULTILINE)
     if sections != EXPECTED_SECTIONS:
         fail(f"expected the nine approved sections in order; found {sections!r}")
-    for heading in ("06 · Featured project: slappywax", "08 · Beyond code"):
+    for heading in ("08 · Beyond code",):
         body = re.search(
             rf"^##\s+{re.escape(heading)}\s*$\n(.*?)(?=^##\s+|\Z)",
             readme,
@@ -60,9 +61,11 @@ def main() -> None:
         fail("README contains a malformed Markdown image or link")
     if readme.count("`") % 2:
         fail("README contains an unmatched inline-code marker")
-    forbidden_claims = ("@aaronsanchez2000", "spotify", "trophy", "custom amber")
+    if readme.count("[Danny Styles - slappywax](https://open.spotify.com/album/0aLqVmlz4ytvJRcGKW8q4D)") != 1:
+        fail("README must show the exact approved slappywax text and Spotify album link once")
+    forbidden_claims = ("@aaronsanchez2000", "spotify.com/embed", "iframe", "trophy", "custom amber")
     if any(claim in readme.casefold() for claim in forbidden_claims):
-        fail("README includes a pending attribution or integration claim")
+        fail("README includes unapproved attribution, embed, trophy, or external accent content")
 
     links = re.findall(r"!\[[^\]]*\]\(([^)]+)\)|\[[^\]]+\]\(([^)]+)\)", readme)
     local_assets: set[str] = set()
@@ -105,7 +108,7 @@ def main() -> None:
                 fail("hero SVG must not depend on remote assets")
 
     print(
-        f"PASS: {len(sections)} ordered sections, {len(urls)} approved GitHub destinations, "
+        f"PASS: {len(sections)} ordered sections, {len(urls)} approved destinations including the exact slappywax album link, "
         f"{len(local_assets)} local image, reviewed public file allowlist, and accessible self-contained SVG."
     )
 
