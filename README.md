@@ -22,15 +22,11 @@ GitHub’s native contribution activity on this profile belongs to `dxnnystyles`
 
 ## 06 · Featured project: slappywax
 
-No slappywax feature is listed until the specific release feature is verified for public presentation.
-
 ## 07 · Chess
 
 [Follow Browser Chess](https://github.com/dxnnystyles/browser-chess) as the standalone game takes shape.
 
 ## 08 · Beyond code
-
-Personal interests will be added when there is verified, approved material to share.
 
 ## 09 · Contact / links
 

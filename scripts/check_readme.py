@@ -46,6 +46,14 @@ def main() -> None:
     sections = re.findall(r"^##\s+(.+?)\s*$", readme, flags=re.MULTILINE)
     if sections != EXPECTED_SECTIONS:
         fail(f"expected the nine approved sections in order; found {sections!r}")
+    for heading in ("06 · Featured project: slappywax", "08 · Beyond code"):
+        body = re.search(
+            rf"^##\s+{re.escape(heading)}\s*$\n(.*?)(?=^##\s+|\Z)",
+            readme,
+            flags=re.MULTILINE | re.DOTALL,
+        )
+        if body is None or body.group(1).strip():
+            fail(f"pending section must remain free of unverified copy: {heading}")
 
     markdown_links = re.findall(r"!\[[^\]]*\]\([^)]+\)|(?<!!)\[[^\]]+\]\([^)]+\)", readme)
     if len(markdown_links) != readme.count("]("):
