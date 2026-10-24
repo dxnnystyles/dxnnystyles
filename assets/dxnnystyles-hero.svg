@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 280" role="img" aria-labelledby="title description">
+  <title id="title">Danny Styles</title>
+  <desc id="description">Danny Styles, dxnnystyles, on a charcoal field with a restrained burnt-orange industrial line.</desc>
+  <rect width="1200" height="280" fill="#24221f"/>
+  <path d="M0 214H1200" stroke="#4b4540" stroke-width="1"/>
+  <path d="M56 214H294" stroke="#c45e34" stroke-width="5"/>
+  <path d="M56 230H158" stroke="#797169" stroke-width="2"/>
+  <path d="M1118 50V214M1134 50V214M1150 50V214" stroke="#393531" stroke-width="2"/>
+  <text x="56" y="130" fill="#f2eee8" font-family="Georgia, 'Times New Roman', serif" font-size="74" letter-spacing="-2">Danny Styles</text>
+  <text x="60" y="180" fill="#d47a52" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="22" letter-spacing="1">dxnnystyles</text>
+</svg>
