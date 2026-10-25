@@ -17,10 +17,7 @@
 </p>
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/hoops/hoops-dark.svg">
-    <img src="assets/hoops/hoops.svg" width="840" alt="Hoops animation of public GitHub contribution activity for dxnnystyles.">
-  </picture>
+  <img src="assets/hoops/hoops.svg" width="840" alt="Hoops animation of public GitHub contribution activity for dxnnystyles.">
 </p>
 
 <p align="center">

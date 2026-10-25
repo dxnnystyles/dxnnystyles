@@ -41,14 +41,40 @@ jobs:
               title = root.find(f"{{{namespace}}}title")
               text_nodes = root.findall(f".//{{{namespace}}}text")
               visible_footer = " ".join(node.text or "" for node in text_nodes)
-              if root.tag != f"{{{namespace}}}svg" or not title or "dxnnystyles" not in (title.text or ""):
+              if root.tag != f"{{{namespace}}}svg" or title is None or "dxnnystyles" not in (title.text or ""):
                   raise SystemExit(f"Invalid or misattributed Hoops image: {path}")
               if "aaronsanchez2000" in path.read_text(encoding="utf-8").casefold():
                   raise SystemExit(f"Unexpected second-account data in {path}")
               if "dxnnystyles · public contributions" not in visible_footer:
                   raise SystemExit(f"Missing public-data attribution in {path}")
+              if filename == "hoops.svg":
+                  desc = root.find(f"{{{namespace}}}desc")
+                  if desc is None:
+                      desc = ET.Element(f"{{{namespace}}}desc")
+                      root.insert(1, desc)
+                  desc.text = (
+                      "Public GitHub contribution activity for dxnnystyles, animated as a basketball shootaround. "
+                      "The cells, dates, scores and animation use public dxnnystyles activity only."
+                  )
+                  for existing in root.findall(f"{{{namespace}}}rect"):
+                      if existing.get("id") == "hoops-theme-independent-panel":
+                          root.remove(existing)
+                  background = ET.Element(f"{{{namespace}}}rect", {
+                      "id": "hoops-theme-independent-panel", "x": "1", "y": "1",
+                      "width": "898", "height": "216", "rx": "8", "fill": "#ffffff",
+                      "stroke": "#d0d7de", "stroke-width": "1", "pointer-events": "none",
+                  })
+                  style_index = next(
+                      (index for index, child in enumerate(list(root)) if child.tag == f"{{{namespace}}}style"),
+                      None,
+                  )
+                  root.insert(style_index + 1 if style_index is not None else 2, background)
+              for existing in root.findall(f"{{{namespace}}}text"):
+                  if existing.get("id") == "hoops-updated-at" or (existing.text or "").startswith("Updated "):
+                      root.remove(existing)
               date_label = ET.Element(f"{{{namespace}}}text", {
-                  "x": "884", "y": "215", "text-anchor": "end", "font-size": "10", "fill": color,
+                  "id": "hoops-updated-at", "x": "884", "y": "215", "text-anchor": "end",
+                  "font-size": "10", "fill": color,
               })
               date_label.text = today
               root.append(date_label)

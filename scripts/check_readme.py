@@ -85,8 +85,11 @@ def main() -> None:
         fail("all images need non-empty alternative text")
     targets = {image.get("src", "") for image in parser.images}
     targets.update(source.get("srcset", "").split()[0] for source in parser.sources)
-    if targets != ASSETS:
-        fail(f"image inventory differs: {sorted(targets ^ ASSETS)!r}")
+    displayed_assets = ASSETS - {"assets/hoops/hoops-dark.svg"}
+    if "<picture>" in readme or "prefers-color-scheme" in readme:
+        fail("Hoops must use one theme-independent asset rather than system-theme switching")
+    if targets != displayed_assets:
+        fail(f"displayed image inventory differs: {sorted(targets ^ displayed_assets)!r}")
     if any(not (ROOT / target).is_file() for target in targets):
         fail("README refers to a missing local image")
     image_by_src = {image.get("src", ""): image for image in parser.images}
