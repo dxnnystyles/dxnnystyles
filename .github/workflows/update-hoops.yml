@@ -1,0 +1,67 @@
+name: Refresh Hoops contribution artwork
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Render public dxnnystyles activity
+        uses: HarrisJDCampbell/hoops@c90b483d3f7e61544afaee4c105a51d410346cb2
+        with:
+          github_user_name: dxnnystyles
+          out_dir: assets/hoops
+          jersey: '#c26037,#e7a875'
+          pace: '0.25'
+          order: newest-first
+          footer: 'dxnnystyles · public contributions'
+
+      - name: Validate and date the generated public assets
+        run: |
+          python3 - <<'PY'
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          namespace = "http://www.w3.org/2000/svg"
+          ET.register_namespace("", namespace)
+          today = datetime.now(timezone.utc).strftime("Updated %Y-%m-%d UTC")
+          for filename, color in (("hoops.svg", "#57606a"), ("hoops-dark.svg", "#7d8590")):
+              path = Path("assets/hoops") / filename
+              root = ET.parse(path).getroot()
+              title = root.find(f"{{{namespace}}}title")
+              text_nodes = root.findall(f".//{{{namespace}}}text")
+              visible_footer = " ".join(node.text or "" for node in text_nodes)
+              if root.tag != f"{{{namespace}}}svg" or not title or "dxnnystyles" not in (title.text or ""):
+                  raise SystemExit(f"Invalid or misattributed Hoops image: {path}")
+              if "aaronsanchez2000" in path.read_text(encoding="utf-8").casefold():
+                  raise SystemExit(f"Unexpected second-account data in {path}")
+              if "dxnnystyles · public contributions" not in visible_footer:
+                  raise SystemExit(f"Missing public-data attribution in {path}")
+              date_label = ET.Element(f"{{{namespace}}}text", {
+                  "x": "884", "y": "215", "text-anchor": "end", "font-size": "10", "fill": color,
+              })
+              date_label.text = today
+              root.append(date_label)
+              ET.ElementTree(root).write(path, encoding="utf-8", xml_declaration=False)
+          PY
+
+      - name: Preserve the last good artwork and refresh changed files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/hoops/hoops.svg assets/hoops/hoops-dark.svg
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Refresh Hoops contribution artwork"
+          git push
