@@ -1,4 +1,5 @@
-<p align="center"><strong>dxnnystyles</strong><br>Software · Chess · Music</p>
+<h1 align="center">dxnnystyles</h1>
+<p align="center">Software · Chess · Music</p>
 
 <p align="center"><strong>Apps &amp; Scripting</strong><br>
 <img src="assets/tech/swift.svg" height="30" alt="Swift"> <img src="assets/tech/python.svg" height="30" alt="Python"> <img src="assets/tech/shell.svg" height="30" alt="Shell"></p>
@@ -14,14 +15,15 @@
 <img src="assets/tech/supabase.svg" height="30" alt="Supabase"><br>
 <sub>🇺🇸 English &nbsp; · &nbsp; 🇫🇷 Français · Learning</sub></p>
 
-<p align="center"><strong>GitHub activity</strong><br><img src="assets/hoops/hoops-profile-dark-panel.svg" width="720" alt="Hoops animation of public GitHub contribution activity for dxnnystyles, shown on a fixed charcoal panel."></p>
+<p align="center"><img src="assets/hoops/hoops-profile-dark-panel.svg" width="720" alt="Hoops animation of public GitHub contribution activity for dxnnystyles, shown on a fixed charcoal panel."></p>
 
-<p align="center"><strong>3D Night View · public contribution calendar</strong><br><img src="assets/3d/profile-night-view.svg" width="640" alt="Three-dimensional Night View of the public dxnnystyles GitHub contribution calendar. Generated from the verified public contribution data snapshot; it is not a real-time view."></p>
+<p align="center"><img src="assets/3d/profile-night-view.svg" width="640" alt="Neon Ember three-dimensional Night View of dxnnystyles public contributions from October 26, 2025 through October 25, 2026. Snapshot updated October 25, 2026; not real time."></p>
 
-<p align="center"><strong>GitHub Stats · Repository Languages</strong><br>
-<img src="assets/stats/github-public-stats.svg" width="360" alt="Public GitHub stats snapshot: 21 public repositories, including 5 original non-fork repositories, 0 public repository stars, and 0 followers, as of 2026-10-26 UTC."> <img src="assets/stats/repository-languages.svg" width="360" alt="Primary languages in five original public repositories: JavaScript in two and HTML in two; one repository has no primary-language label. Counted by repository, not code volume; snapshot 2026-10-26 UTC."></p>
+<p align="center"><img src="assets/summary-cards/0-profile-details.svg" width="700" alt="GitHub Profile Details for dxnnystyles: 501 all-time contributions as of October 26, 2026 UTC, 5 public repositories, joined GitHub 1 year ago, and monthly totals from the separate public calendar snapshot October 26, 2025 through October 25, 2026. The periods are distinct; contact details are omitted."></p>
 
-<p align="center"><strong>Recent Public Events</strong><br><img src="assets/activity/public-events-sample.svg" width="720" alt="Daily counts of 244 public GitHub event records returned for dxnnystyles from October 14 through October 25, 2026 UTC: Oct 14 5; Oct 19 1; Oct 21 7; Oct 22 59; Oct 23 59; Oct 24 64; Oct 25 49. The public Events API is incomplete and delayed; these are event records, not contributions, commits, or complete activity."></p>
+<p align="center"><img src="assets/summary-cards/3-stats.svg" width="340" alt="GitHub Stats: public stars, commits, pull requests, issues, and repositories contributed to. Snapshot generated October 26, 2026 UTC."> <img src="assets/summary-cards/1-repos-per-language.svg" width="340" alt="Repositories per Language: language categories across public repositories. Snapshot generated October 26, 2026 UTC."></p>
+
+<p align="center"><img src="assets/summary-cards/2-most-commit-language.svg" width="340" alt="Most Commit Language: language categories represented in public commit history; this is not code volume or complete activity history. Snapshot generated October 26, 2026 UTC."> <img src="assets/summary-cards/4-productive-time.svg" width="340" alt="Productive Time: hourly commits over the trailing year grouped in America/Los_Angeles. Snapshot generated October 26, 2026 UTC."></p>
 
 <p align="center"><a href="https://dxnnystyles.github.io/browser-chess/"><img src="assets/browser-chess-launcher.svg" width="720" alt="Browser Chess, a same-device, two-player game. Open the live game."></a><br><a href="https://github.com/dxnnystyles/browser-chess">Browser Chess Source</a></p>
 

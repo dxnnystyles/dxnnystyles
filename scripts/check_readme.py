@@ -25,11 +25,13 @@ ASSETS = {
     "assets/browser-chess-launcher.svg", "assets/music/slappywax-cover.jpg",
     "assets/hoops/hoops-profile-dark-panel.svg", "assets/hoops/hoops.svg",
     "assets/hoops/hoops-dark.svg", "assets/3d/profile-night-view.svg",
-    "assets/stats/github-public-stats.svg", "assets/stats/repository-languages.svg",
-    "assets/activity/public-events-sample.svg",
+    *(f"assets/summary-cards/{name}.svg" for name in (
+        "0-profile-details", "1-repos-per-language", "2-most-commit-language",
+        "3-stats", "4-productive-time",
+    )),
     *(f"assets/tech/{name}.svg" for name in TECH),
 }
-ALLOWED = {".gitignore", "README.md", "scripts/check_readme.py", ".github/workflows/update-hoops.yml", *ASSETS}
+ALLOWED = {".gitignore", "README.md", "scripts/check_readme.py", "scripts/verify_summary_cards.py", ".github/workflows/update-hoops.yml", *ASSETS}
 
 class Markup(HTMLParser):
     def __init__(self) -> None:
@@ -51,25 +53,26 @@ def fail(message: str) -> None:
 
 def main() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    if '<p align="center"><strong>dxnnystyles</strong><br>Software · Chess · Music</p>' not in readme:
-        fail("centered identity is missing")
+    if '<h1 align="center">dxnnystyles</h1>\n<p align="center">Software · Chess · Music</p>' not in readme:
+        fail("centered H1 identity and directly following subtitle are required")
     if re.search(r"^#{1,6}\s", readme, flags=re.MULTILINE) or "Beyond code" in readme.casefold():
-        fail("prose-heavy headings or removed section remain")
+        fail("Markdown section headings or removed section remain")
+    if re.search(r"<h[2-6]\b", readme, flags=re.IGNORECASE):
+        fail("standalone headings after the identity must be removed")
+    if any(label in readme for label in ("GitHub activity", "3D Night View · public contribution calendar", "GitHub Stats · Repository Languages", "Recent Public Events")):
+        fail("standalone widget section labels must not remain")
     if readme.count("assets/hoops/hoops-profile-dark-panel.svg") != 1: fail("fixed dark Hoops panel is not the single displayed Hoops asset")
     if "Danny Styles - slappywax" not in readme or readme.count("https://open.spotify.com/album/0aLqVmlz4ytvJRcGKW8q4D") != 1:
         fail("exact slappywax wording/link is missing or duplicated")
     if "Browser Chess Source" not in readme or "Open the live game" not in readme: fail("approved game links are missing")
-    event_asset=(ROOT/"assets/activity/public-events-sample.svg").read_text(encoding="utf-8")
-    disclosure=(readme+event_asset).casefold()
-    if "2026-10-14" not in disclosure or "2026-10-25" not in disclosure or not all(x in disclosure for x in ("incomplete", "delayed", "not contributions", "not represent complete activity")):
-        fail("event sample range and incompleteness disclosure are required")
     if any(term in readme.casefold() for term in ("@aaronsanchez2000", "spotify.com/embed", "<iframe", "chess.com", "trophy", "linktree", "ds-site", "lowlighter")):
         fail("README contains an unapproved identity, integration, or destination")
     parser=Markup(); parser.feed(readme)
-    paired={"assets/stats/github-public-stats.svg", "assets/stats/repository-languages.svg"}
-    if not any(paired.issubset(set(group)) for group in parser.paragraph_images): fail("Stats and Repository Languages must share one inline responsive paragraph")
-    if next((img.get("width") for img in parser.images if img.get("src")=="assets/activity/public-events-sample.svg"),None)!="720": fail("Recent Public Events must occupy the wider row")
-    if len(parser.images) != 20: fail(f"expected 13 technology badges and seven other images; found {len(parser.images)}")
+    paired={"assets/summary-cards/3-stats.svg", "assets/summary-cards/1-repos-per-language.svg"}
+    if not any(paired.issubset(set(group)) for group in parser.paragraph_images): fail("Stats and Repositories per Language must share one inline responsive paragraph")
+    second_pair={"assets/summary-cards/2-most-commit-language.svg", "assets/summary-cards/4-productive-time.svg"}
+    if not any(second_pair.issubset(set(group)) for group in parser.paragraph_images): fail("Most Commit Language and Productive Time must share one inline responsive paragraph")
+    if len(parser.images) != 22: fail(f"expected 13 technology badges and nine other images; found {len(parser.images)}")
     if any(not (image.get("alt") or "").strip() for image in parser.images): fail("an image is missing alternative text")
     image_paths={image.get("src", "").split("#",1)[0] for image in parser.images}
     source_paths={source.get("srcset", "").split("#",1)[0] for source in parser.sources}
@@ -88,10 +91,13 @@ def main() -> None:
     positions=[readme.find(label) for label in ordered_labels]
     if any(position<0 for position in positions) or positions!=sorted(positions):
         fail("technology categories, subgroups, and spoken-language labels are missing or out of order")
-    if readme.count('align="center"') < 8: fail("technology labels and badge rows must remain centered")
+    if readme.count('align="center"') < 8: fail("identity, technology labels, and widget rows must remain centered")
     if parser.urls != EXPECTED_URLS: fail(f"destinations differ: {sorted(parser.urls ^ EXPECTED_URLS)}")
     for target in references:
         if not (ROOT / target).is_file(): fail(f"missing image {target}")
+    paired_charts=[ET.parse(ROOT/path).getroot() for path in sorted(paired)]
+    dimensions=[(chart.get("width"), chart.get("height"), chart.get("viewBox")) for chart in paired_charts]
+    if dimensions[0] != dimensions[1]: fail("Public GitHub Stats and Repository Languages SVG canvases must have identical dimensions and aspect ratios")
     for name in TECH:
         path=ROOT/f"assets/tech/{name}.svg"
         root=ET.parse(path).getroot()
@@ -106,9 +112,30 @@ def main() -> None:
             if any(k.endswith("href") and v.startswith(("http:", "https:")) for k,v in node.attrib.items()): fail(f"remote embedded image in {path.relative_to(ROOT)}")
     cover=(ROOT/"assets/music/slappywax-cover.jpg").read_bytes()
     if cover[:2] != b"\xff\xd8": fail("slappywax source image is not JPEG")
-    for chart_path in (ROOT/"assets/stats/github-public-stats.svg", ROOT/"assets/stats/repository-languages.svg", ROOT/"assets/activity/public-events-sample.svg"):
+    card_paths=sorted((ROOT/"assets/summary-cards").glob("*.svg"))
+    if len(card_paths)!=5: fail(f"expected five summary-card assets; found {len(card_paths)}")
+    for chart_path in card_paths:
         chart=ET.parse(chart_path).getroot()
-        if not any(node.tag.endswith("rect") and node.get("fill")=="#161b22" for node in chart): fail(f"chart must use the shared dark surface: {chart_path.relative_to(ROOT)}")
+        if not any(node.tag.endswith("rect") and node.get("fill")=="#161b22" for node in chart.iter()): fail(f"chart must use the shared dark surface: {chart_path.relative_to(ROOT)}")
+        if chart.get("role")!="img" or chart.find(f"{ns}title") is None or chart.find(f"{ns}desc") is None:
+            fail(f"summary card needs intrinsic accessible naming: {chart_path.relative_to(ROOT)}")
+    details=ET.parse(ROOT/"assets/summary-cards/0-profile-details.svg").getroot()
+    details_text=" ".join(node.text or "" for node in details.iter() if node.tag.endswith("text"))
+    if re.search(r"\b(?:email|company|location|website|twitter)\b|[\w.+-]+@[\w.-]+\.[a-z]{2,}",details_text,re.I):
+        fail("Profile Details contains contact metadata")
+    if (details.get("width"), details.get("height"), details.get("viewBox")) != ("700", "380", "0 0 700 380"):
+        fail("Profile Details must remain the wide 700x380 feature card")
+    details_desc = details.find(f"{ns}desc")
+    if details_desc is None or "all-time contribution total" not in (details_desc.text or "") or "monthly totals aggregated" not in (details_desc.text or ""):
+        fail("Profile Details must distinguish the all-time total from the trailing-year monthly chart")
+    if not all(label in details_text for label in ("All-time", "contributions", "Public repos", "Joined GitHub", "contributions in the last year")):
+        fail("Profile Details is missing its approved labels or rolling-year chart caption")
+    for filename in ("1-repos-per-language.svg","2-most-commit-language.svg","3-stats.svg","4-productive-time.svg"):
+        card=ET.parse(ROOT/"assets/summary-cards"/filename).getroot()
+        if (card.get("width"),card.get("height"),card.get("viewBox"))!=("340","200","0 0 340 200"):
+            fail(f"supporting card must use matching 340x200 dimensions: {filename}")
+    if "America/Los_Angeles" not in (ROOT/"assets/summary-cards/4-productive-time.svg").read_text(encoding="utf-8"):
+        fail("Productive Time must retain the verified local time zone")
     panel=ET.parse(ROOT/"assets/hoops/hoops-profile-dark-panel.svg").getroot()
     dark=ET.parse(ROOT/"assets/hoops/hoops-dark.svg").getroot()
     panel_rect=next((node for node in panel.iter() if node.get("id")=="widget-dark-panel"),None)
@@ -120,6 +147,8 @@ def main() -> None:
         fail("existing pinned public-only Hoops workflow changed unexpectedly")
     actual={p.relative_to(ROOT).as_posix() for p in ROOT.rglob("*") if p.is_file() and ".git" not in p.parts and "__pycache__" not in p.parts}
     if actual != ALLOWED: fail(f"public allowlist differs: {sorted(actual ^ ALLOWED)}")
-    print(f"PASS: centered composition; vertical text-and-badge technology groups; {len(TECH)} labeled technologies; 5 public-data widgets; event caveat/date; chess/music destinations; {len(parser.images)} accessible images; {len(actual)} allowed files.")
+    for old in ("assets/stats/github-public-stats.svg", "assets/stats/repository-languages.svg", "assets/activity/public-events-sample.svg"):
+        if (ROOT/old).exists(): fail(f"replaced legacy widget asset remains: {old}")
+    print(f"PASS: centered composition; vertical text-and-badge technology groups; {len(TECH)} labeled technologies; five unified public-data cards; chess/music destinations; {len(parser.images)} accessible images; {len(actual)} allowed files.")
 
 if __name__ == "__main__": main()
