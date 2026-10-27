@@ -34,7 +34,7 @@ ASSETS = {
     )),
     *(f"assets/tech/{name}.svg" for name in TECH),
 }
-ALLOWED = {".gitignore", "README.md", "scripts/check_readme.py", "scripts/summary_card_date.py", "scripts/verify_summary_cards.py", "scripts/publish_summary_cards.py", ".github/workflows/update-hoops.yml", ".github/workflows/update-summary-cards.yml", "tests/test_summary_card_refresh.py", *ASSETS}
+ALLOWED = {".gitignore", "README.md", "scripts/check_readme.py", "scripts/summary_card_date.py", "scripts/verify_summary_cards.py", "scripts/publish_summary_cards.py", "scripts/prepare_hoops_assets.py", ".github/workflows/update-hoops.yml", ".github/workflows/update-summary-cards.yml", "tests/test_summary_card_refresh.py", "tests/test_hoops_refresh.py", *ASSETS}
 
 class Markup(HTMLParser):
     def __init__(self) -> None:
@@ -161,6 +161,10 @@ def main() -> None:
     workflow=(ROOT/".github/workflows/update-hoops.yml").read_text()
     if "HarrisJDCampbell/hoops@c90b483d3f7e61544afaee4c105a51d410346cb2" not in workflow or "github_user_name: dxnnystyles" not in workflow or "read:user" in workflow:
         fail("existing pinned public-only Hoops workflow changed unexpectedly")
+    if "out_dir: ${{ runner.temp }}/hoops-generated" not in workflow or "scripts/prepare_hoops_assets.py" not in workflow:
+        fail("Hoops must generate and validate outside tracked assets before promotion")
+    if any(name not in workflow for name in ("hoops.svg", "hoops-dark.svg", "hoops-profile-dark-panel.svg")):
+        fail("Hoops publication must include both generator outputs and the README-displayed panel")
     actual={p.relative_to(ROOT).as_posix() for p in ROOT.rglob("*") if p.is_file() and ".git" not in p.parts and "__pycache__" not in p.parts}
     if actual != ALLOWED: fail(f"public allowlist differs: {sorted(actual ^ ALLOWED)}")
     for old in ("assets/stats/github-public-stats.svg", "assets/stats/repository-languages.svg", "assets/activity/public-events-sample.svg"):

@@ -20,6 +20,7 @@ REPO = Path(__file__).resolve().parents[1]
 PUBLISHER = REPO / "scripts/publish_summary_cards.py"
 VALIDATOR = REPO / "scripts/verify_summary_cards.py"
 WORKFLOW = REPO / ".github/workflows/update-summary-cards.yml"
+HOOPS_WORKFLOW = REPO / ".github/workflows/update-hoops.yml"
 sys.path.insert(0, str(REPO / "scripts"))
 from summary_card_date import extract_date_line, update_readme_date, utc_publication_timestamp
 
@@ -80,8 +81,11 @@ class RefreshHardeningTests(unittest.TestCase):
 
     def test_workflow_serializes_refreshes_and_pins_reviewed_node24_actions(self):
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("schedule:", workflow)
         self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("schedule:", workflow)
+        hoops_workflow = HOOPS_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("workflow_dispatch:", hoops_workflow)
+        self.assertNotIn("schedule:", hoops_workflow)
         self.assertIn("group: summary-cards-refresh-${{ github.repository }}", workflow)
         self.assertIn("queue: max", workflow)
         self.assertIn("cancel-in-progress: false", workflow)
