@@ -1,4 +1,6 @@
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
+import sys
 import os
 import shutil
 import subprocess
@@ -18,6 +20,11 @@ REPO = Path(__file__).resolve().parents[1]
 PUBLISHER = REPO / "scripts/publish_summary_cards.py"
 VALIDATOR = REPO / "scripts/verify_summary_cards.py"
 WORKFLOW = REPO / ".github/workflows/update-summary-cards.yml"
+sys.path.insert(0, str(REPO / "scripts"))
+from summary_card_date import extract_date_line, update_readme_date, utc_publication_timestamp
+
+PROFILE_DETAILS_LINE = '<p align="center"><img src="assets/summary-cards/0-profile-details.svg" width="700" alt="test"></p>'
+PRESERVED_README = "# private test fixture\n\n[approved destination](https://example.invalid)\n\n"
 
 
 def run_git(directory: Path, *args: str, check: bool = True) -> str:
@@ -26,6 +33,51 @@ def run_git(directory: Path, *args: str, check: bool = True) -> str:
 
 
 class RefreshHardeningTests(unittest.TestCase):
+    def test_utc_publication_date_and_readme_locality(self):
+        local_time = datetime(2026, 10, 27, 0, 30, tzinfo=timezone(timedelta(hours=7)))
+        utc_time = utc_publication_timestamp(local_time)
+        self.assertEqual(utc_time.isoformat(), "2026-10-26T17:30:00+00:00")
+        self.assertEqual(utc_time.date().isoformat(), "2026-10-26")
+        with self.assertRaises(ValueError):
+            utc_publication_timestamp(datetime(2026, 10, 27, 0, 30))
+
+        original = PRESERVED_README + PROFILE_DETAILS_LINE + "\n"
+        first = update_readme_date(original, "2000-01-01")
+        second = update_readme_date(first, "2026-10-26")
+        old_line = '<p align="center"><sub>Profile snapshot · Updated <strong>2000-01-01</strong></sub></p>'
+        new_line = '<p align="center"><sub>Profile snapshot · Updated <strong>2026-10-26</strong></sub></p>'
+        self.assertEqual(second, first.replace(old_line, new_line, 1))
+        self.assertTrue(second.index(new_line) < second.index(PROFILE_DETAILS_LINE))
+        self.assertEqual(extract_date_line(second)[0], "2026-10-26")
+        self.assertEqual(second.count("Profile snapshot · Updated"), 1)
+
+    def test_malformed_or_partial_generated_set_is_rejected_before_publisher(self):
+        self.assertEqual(run_git(self.work, "rev-parse", "HEAD"), self.baseline)
+        baseline_readme = run_git(self.work, "show", f"{self.baseline}:README.md")
+        malformed_dir = self.root / "malformed-cards"
+        malformed_dir.mkdir()
+        for name in FILES:
+            shutil.copy2(REPO / "assets/summary-cards" / name, malformed_dir / name)
+        (malformed_dir / FILES[0]).write_text("<svg><broken>", encoding="utf-8")
+        malformed = subprocess.run(
+            ["python3", str(VALIDATOR), "--directory", str(malformed_dir), "--no-copy"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(malformed.returncode, 0)
+
+        (malformed_dir / FILES[0]).write_text("valid-fixture", encoding="utf-8")
+        (malformed_dir / FILES[-1]).unlink()
+        partial = subprocess.run(
+            ["python3", str(VALIDATOR), "--directory", str(malformed_dir), "--no-copy"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(partial.returncode, 0)
+        self.assertEqual(run_git(self.work, "rev-parse", "HEAD"), self.baseline)
+        self.assertEqual(run_git(self.work, "show", f"{self.baseline}:README.md"), baseline_readme)
+        self.assertEqual(run_git(self.work, "ls-remote", "origin", "refs/heads/main").split()[0], self.baseline)
+
     def test_workflow_serializes_refreshes_and_pins_reviewed_node24_actions(self):
         workflow = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("schedule:", workflow)
@@ -86,12 +138,17 @@ class RefreshHardeningTests(unittest.TestCase):
             path = self.work / "assets/summary-cards" / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(f"last-good:{name}\n", encoding="utf-8")
-        run_git(self.work, "add", "--", *ASSETS)
+        (self.work / "README.md").write_text(
+            update_readme_date(PRESERVED_README + PROFILE_DETAILS_LINE + "\n", "2000-01-01"),
+            encoding="utf-8",
+        )
+        run_git(self.work, "add", "--", *ASSETS, "README.md")
         run_git(self.work, "commit", "-m", "seed last-good cards")
         run_git(self.work, "push", "-u", "origin", "main")
         self.baseline = run_git(self.work, "rev-parse", "HEAD")
         (self.work / "scripts").mkdir()
         shutil.copy2(PUBLISHER, self.work / "scripts/publish_summary_cards.py")
+        shutil.copy2(REPO / "scripts/summary_card_date.py", self.work / "scripts/summary_card_date.py")
         self.output.mkdir()
         for name in FILES:
             (self.output / name).write_text(f"candidate:{name}\n", encoding="utf-8")
@@ -117,18 +174,51 @@ class RefreshHardeningTests(unittest.TestCase):
         return result
 
     def test_atomic_success_and_unchanged_noop(self):
+        baseline_readme = run_git(self.work, "show", f"{self.baseline}:README.md")
         result = self.publish(expect_success=True)
-        self.assertIn("published complete validated set", result.stdout)
+        self.assertIn("published complete validated card set and matching UTC date", result.stdout)
         first = run_git(self.work, "rev-parse", "HEAD")
         self.assertEqual(run_git(self.work, "rev-parse", f"{first}^1"), self.baseline)
-        self.assertEqual(set(run_git(self.work, "diff-tree", "--no-commit-id", "--name-only", "-r", first).splitlines()), set(ASSETS))
+        changed = set(run_git(self.work, "diff-tree", "--no-commit-id", "--name-only", "-r", first).splitlines())
+        self.assertEqual(changed, set(ASSETS) | {"README.md"})
         self.assertEqual(run_git(self.work, "ls-remote", "origin", "refs/heads/main").split()[0], first)
+        first_readme = run_git(self.work, "show", f"{first}:README.md")
+        date_from_readme = extract_date_line(first_readme)[0]
+        commit_time = datetime.fromisoformat(run_git(self.work, "show", "-s", "--format=%cI", first))
+        self.assertEqual(commit_time.astimezone(timezone.utc).date().isoformat(), date_from_readme)
+        self.assertEqual(first_readme, update_readme_date(baseline_readme, date_from_readme))
+        self.assertEqual(extract_date_line(baseline_readme)[0], "2000-01-01")
 
         self.env["BASELINE_SHA"] = first
         result = self.publish(expect_success=True)
-        self.assertIn("unchanged; no commit or push", result.stdout)
+        self.assertIn("existing cards and refresh date were preserved", result.stdout)
         self.assertEqual(run_git(self.work, "rev-parse", "HEAD"), first)
         self.assertEqual(run_git(self.work, "ls-remote", "origin", "refs/heads/main").split()[0], first)
+        self.assertEqual(run_git(self.work, "show", f"{first}:README.md"), first_readme)
+
+    def test_first_success_adds_date_when_no_prior_refresh_date_exists(self):
+        original_readme = PRESERVED_README + PROFILE_DETAILS_LINE + "\n"
+        (self.work / "README.md").write_text(original_readme, encoding="utf-8")
+        run_git(self.work, "add", "README.md")
+        run_git(self.work, "commit", "--amend", "--no-edit")
+        run_git(self.work, "push", "--force", "origin", "main")
+        self.baseline = run_git(self.work, "rev-parse", "HEAD")
+        self.env["BASELINE_SHA"] = self.baseline
+
+        result = self.publish(expect_success=True)
+        self.assertIn("published complete validated card set and matching UTC date", result.stdout)
+        published = run_git(self.work, "rev-parse", "HEAD")
+        readme = subprocess.run(
+            ["git", "show", f"{published}:README.md"],
+            cwd=self.work,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        date_line = extract_date_line(readme)
+        self.assertIsNotNone(date_line)
+        self.assertEqual(readme, update_readme_date(original_readme, date_line[0]))
+        self.assertEqual(run_git(self.work, "ls-remote", "origin", "refs/heads/main").split()[0], published)
 
     def test_incomplete_input_and_rejected_push_preserve_then_recover(self):
         missing = self.output / FILES[-1]
@@ -137,6 +227,8 @@ class RefreshHardeningTests(unittest.TestCase):
         self.assertIn("Expected exactly five SVGs", result.stderr)
         self.assertEqual(run_git(self.work, "rev-parse", "HEAD"), self.baseline)
         self.assertEqual(run_git(self.work, "ls-remote", "origin", "refs/heads/main").split()[0], self.baseline)
+        baseline_readme = run_git(self.work, "show", f"{self.baseline}:README.md")
+        self.assertEqual(run_git(self.work, "show", f"{self.baseline}:README.md"), baseline_readme)
         missing.write_text(f"candidate:{FILES[-1]}\n", encoding="utf-8")
 
         subprocess.run(["git", "clone", "--branch", "main", str(self.remote), str(self.racer)], check=True, capture_output=True)
@@ -156,9 +248,10 @@ class RefreshHardeningTests(unittest.TestCase):
         hook.chmod(0o755)
         self.env["RACE_REPO"] = str(self.racer)
         result = self.publish(expect_success=False)
-        self.assertIn("last-good five-card hashes are unchanged", result.stderr.casefold())
+        self.assertIn("last-good five-card hashes and refresh date are unchanged", result.stderr.casefold())
         remote_after_race = run_git(self.racer, "rev-parse", "HEAD")
         self.assertEqual(run_git(self.racer, "ls-remote", "origin", "refs/heads/main").split()[0], remote_after_race)
+        self.assertEqual(run_git(self.racer, "show", f"{remote_after_race}:README.md"), baseline_readme)
         for name in FILES:
             self.assertEqual(
                 run_git(self.racer, "show", f"{remote_after_race}:assets/summary-cards/{name}"),
@@ -170,10 +263,17 @@ class RefreshHardeningTests(unittest.TestCase):
         run_git(self.work, "reset", "--hard", "origin/main")
         self.env["BASELINE_SHA"] = remote_after_race
         result = self.publish(expect_success=True)
-        self.assertIn("published complete validated set", result.stdout)
+        self.assertIn("published complete validated card set and matching UTC date", result.stdout)
         recovered = run_git(self.work, "rev-parse", "HEAD")
         self.assertEqual(run_git(self.work, "rev-parse", f"{recovered}^1"), remote_after_race)
-        self.assertEqual(set(run_git(self.work, "diff-tree", "--no-commit-id", "--name-only", "-r", recovered).splitlines()), set(ASSETS))
+        recovered_paths = set(run_git(self.work, "diff-tree", "--no-commit-id", "--name-only", "-r", recovered).splitlines())
+        self.assertEqual(recovered_paths, set(ASSETS) | {"README.md"})
+        recovered_commit_time = datetime.fromisoformat(run_git(self.work, "show", "-s", "--format=%cI", recovered))
+        recovered_utc_date = recovered_commit_time.astimezone(timezone.utc).date().isoformat()
+        self.assertEqual(
+            extract_date_line(run_git(self.work, "show", f"{recovered}:README.md"))[0],
+            recovered_utc_date,
+        )
 
 
 if __name__ == "__main__":

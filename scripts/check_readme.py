@@ -5,8 +5,11 @@ from __future__ import annotations
 import re
 import sys
 import xml.etree.ElementTree as ET
+import argparse
 from html.parser import HTMLParser
 from pathlib import Path
+
+from summary_card_date import extract_date_line
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_URLS = {
@@ -31,7 +34,7 @@ ASSETS = {
     )),
     *(f"assets/tech/{name}.svg" for name in TECH),
 }
-ALLOWED = {".gitignore", "README.md", "scripts/check_readme.py", "scripts/verify_summary_cards.py", "scripts/publish_summary_cards.py", ".github/workflows/update-hoops.yml", ".github/workflows/update-summary-cards.yml", "tests/test_summary_card_refresh.py", *ASSETS}
+ALLOWED = {".gitignore", "README.md", "scripts/check_readme.py", "scripts/summary_card_date.py", "scripts/verify_summary_cards.py", "scripts/publish_summary_cards.py", ".github/workflows/update-hoops.yml", ".github/workflows/update-summary-cards.yml", "tests/test_summary_card_refresh.py", *ASSETS}
 
 class Markup(HTMLParser):
     def __init__(self) -> None:
@@ -52,7 +55,20 @@ def fail(message: str) -> None:
     print(f"FAIL: {message}", file=sys.stderr); raise SystemExit(1)
 
 def main() -> None:
+    parser_args = argparse.ArgumentParser(description=__doc__)
+    parser_args.add_argument(
+        "--require-refresh-date",
+        action="store_true",
+        help="Fail if the first changed successful card refresh has not populated the visible date yet.",
+    )
+    args = parser_args.parse_args()
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    try:
+        refresh_date = extract_date_line(readme)
+    except ValueError as error:
+        fail(str(error))
+    if refresh_date is None and args.require_refresh_date:
+        fail("the visible refresh date is not initialized; it is added after a changed complete card set publishes successfully")
     if '<h1 align="center">dxnnystyles</h1>\n<p align="center">Software · Chess · Music</p>' not in readme:
         fail("centered H1 identity and directly following subtitle are required")
     if re.search(r"^#{1,6}\s", readme, flags=re.MULTILINE) or "Beyond code" in readme.casefold():
@@ -149,6 +165,7 @@ def main() -> None:
     if actual != ALLOWED: fail(f"public allowlist differs: {sorted(actual ^ ALLOWED)}")
     for old in ("assets/stats/github-public-stats.svg", "assets/stats/repository-languages.svg", "assets/activity/public-events-sample.svg"):
         if (ROOT/old).exists(): fail(f"replaced legacy widget asset remains: {old}")
-    print(f"PASS: centered composition; vertical text-and-badge technology groups; {len(TECH)} labeled technologies; five unified public-data cards; chess/music destinations; {len(parser.images)} accessible images; {len(actual)} allowed files.")
+    date_status = f"refresh date {refresh_date[0]}" if refresh_date else "refresh date awaits first changed successful publication"
+    print(f"PASS: centered composition; vertical text-and-badge technology groups; {len(TECH)} labeled technologies; five unified public-data cards; {date_status}; chess/music destinations; {len(parser.images)} accessible images; {len(actual)} allowed files.")
 
 if __name__ == "__main__": main()
