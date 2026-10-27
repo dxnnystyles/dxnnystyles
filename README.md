@@ -19,6 +19,8 @@
 
 <p align="center"><img src="assets/3d/profile-night-view.svg" width="640" alt="Neon Ember three-dimensional Night View of dxnnystyles public contributions from October 26, 2025 through October 25, 2026. Snapshot updated October 25, 2026; not real time."></p>
 
+<p align="center"><sub>Profile snapshot · Updated <strong>2026-10-27</strong></sub></p>
+
 <p align="center"><img src="assets/summary-cards/0-profile-details.svg" width="700" alt="GitHub Profile Details for dxnnystyles, including all-time contributions, public repository count, account age, and monthly totals aggregated from the separate public daily contribution calendar for the trailing year. These are distinct measurements; contact details are omitted."></p>
 
 <p align="center"><img src="assets/summary-cards/3-stats.svg" width="340" alt="GitHub Stats: public stars, commits, pull requests, issues, and repositories contributed to. Values reflect the most recent successful refresh."> <img src="assets/summary-cards/1-repos-per-language.svg" width="340" alt="Repositories per Language: language categories across public repositories. Values reflect the most recent successful refresh."></p>
