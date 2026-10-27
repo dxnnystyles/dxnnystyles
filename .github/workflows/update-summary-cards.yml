@@ -1,0 +1,98 @@
+name: Refresh public summary cards
+
+on:
+  workflow_dispatch:
+
+# Scheduled and manual runs share one queue. Active publication is not canceled;
+# queued runs wait up to GitHub's concurrency-group limit.
+concurrency:
+  group: summary-cards-refresh-${{ github.repository }}
+  queue: max
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  generate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      baseline_sha: ${{ steps.snapshot.outputs.sha }}
+    steps:
+      - name: Check out the current profile baseline without write credentials
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Record the profile baseline before generation
+        id: snapshot
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 24
+
+      - name: Generate public dxnnystyles cards in runner temporary storage
+        uses: dxnnystyles/github-profile-summary-cards@c4381200d1eabe72d08bbafd2911c26cb0cddf03
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SUMMARY_CARDS_OUTPUT_PATH: ${{ runner.temp }}/summary-cards-v1-output
+        with:
+          USERNAME: dxnnystyles
+          NAME: dxnnystyles
+          THEME: dxnnystyles
+          TIME_ZONE: America/Los_Angeles
+          AUTO_PUSH: false
+
+      - name: Validate all five cards before creating a transferable artifact
+        run: python3 scripts/verify_summary_cards.py --copy-to "$RUNNER_TEMP/summary-cards-verified"
+        env:
+          SUMMARY_CARDS_OUTPUT_PATH: ${{ runner.temp }}/summary-cards-v1-output
+          SUMMARY_CARDS_CANDIDATE_SHA: c4381200d1eabe72d08bbafd2911c26cb0cddf03
+
+      - name: Upload the complete validated card set
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: summary-cards-${{ github.run_id }}
+          path: ${{ runner.temp }}/summary-cards-verified/*.svg
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: generate
+    if: ${{ needs.generate.result == 'success' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the unchanged profile baseline
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download only this run's validated artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: summary-cards-${{ github.run_id }}
+          path: ${{ runner.temp }}/summary-cards-verified
+          digest-mismatch: error
+
+      - name: Revalidate the complete set before any profile write
+        run: python3 scripts/verify_summary_cards.py --directory "$VERIFIED_CARDS_DIR" --no-copy
+        env:
+          VERIFIED_CARDS_DIR: ${{ runner.temp }}/summary-cards-verified
+          SUMMARY_CARDS_CANDIDATE_SHA: c4381200d1eabe72d08bbafd2911c26cb0cddf03
+
+      - name: Commit and push only the complete card update
+        run: python3 scripts/publish_summary_cards.py
+        env:
+          BASELINE_SHA: ${{ needs.generate.outputs.baseline_sha }}
+          VERIFIED_CARDS_DIR: ${{ runner.temp }}/summary-cards-verified
