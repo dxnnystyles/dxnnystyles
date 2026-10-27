@@ -100,6 +100,14 @@ def validate_card_set(directory: Path) -> tuple[list[tuple[str, ET.Element, str,
                 raise SystemExit("Profile Details contains contact/personal metadata markers.")
             if not any(local_name(node.tag) == "path" and node.attrib.get("d", "").strip() for node in nodes):
                 raise SystemExit("Profile Details contribution visualization is missing.")
+            month_ticks = [
+                (node.text or "").strip()
+                for node in nodes
+                if local_name(node.tag) == "text" and re.fullmatch(r"(\d{2})/(0[1-9]|1[0-2])", (node.text or "").strip())
+            ]
+            month_keys = [int(value[:2]) * 12 + int(value[3:]) for value in month_ticks]
+            if len(month_ticks) != 3 or len(set(month_ticks)) != 3 or month_keys != sorted(month_keys):
+                raise SystemExit(f"Profile Details must expose three chronological readable month ticks; found {month_ticks}.")
         if name == "4-productive-time.svg":
             bars = [node for node in nodes if local_name(node.tag) == "rect" and node.attrib.get("class") == "bar"]
             if len(bars) != 24:

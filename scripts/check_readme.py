@@ -31,7 +31,7 @@ ASSETS = {
     )),
     *(f"assets/tech/{name}.svg" for name in TECH),
 }
-ALLOWED = {".gitignore", "README.md", "scripts/check_readme.py", "scripts/verify_summary_cards.py", ".github/workflows/update-hoops.yml", *ASSETS}
+ALLOWED = {".gitignore", "README.md", "scripts/check_readme.py", "scripts/verify_summary_cards.py", "scripts/publish_summary_cards.py", ".github/workflows/update-hoops.yml", ".github/workflows/update-summary-cards.yml", "tests/test_summary_card_refresh.py", *ASSETS}
 
 class Markup(HTMLParser):
     def __init__(self) -> None:
