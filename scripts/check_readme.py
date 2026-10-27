@@ -165,7 +165,7 @@ def main() -> None:
     if actual != ALLOWED: fail(f"public allowlist differs: {sorted(actual ^ ALLOWED)}")
     for old in ("assets/stats/github-public-stats.svg", "assets/stats/repository-languages.svg", "assets/activity/public-events-sample.svg"):
         if (ROOT/old).exists(): fail(f"replaced legacy widget asset remains: {old}")
-    date_status = f"refresh date {refresh_date[0]}" if refresh_date else "refresh date awaits first changed successful publication"
+    date_status = f"refresh date {refresh_date[0]}" if refresh_date else "refresh date awaits first successful publication"
     print(f"PASS: centered composition; vertical text-and-badge technology groups; {len(TECH)} labeled technologies; five unified public-data cards; {date_status}; chess/music destinations; {len(parser.images)} accessible images; {len(actual)} allowed files.")
 
 if __name__ == "__main__": main()

@@ -220,6 +220,64 @@ class RefreshHardeningTests(unittest.TestCase):
         self.assertEqual(readme, update_readme_date(original_readme, date_line[0]))
         self.assertEqual(run_git(self.work, "ls-remote", "origin", "refs/heads/main").split()[0], published)
 
+    def test_first_success_adds_date_when_cards_are_already_current(self):
+        original_readme = PRESERVED_README + PROFILE_DETAILS_LINE
+        (self.work / "README.md").write_text(original_readme, encoding="utf-8")
+        run_git(self.work, "add", "README.md")
+        run_git(self.work, "commit", "--amend", "--no-edit")
+        run_git(self.work, "push", "--force", "origin", "main")
+        self.baseline = run_git(self.work, "rev-parse", "HEAD")
+        self.env["BASELINE_SHA"] = self.baseline
+        for name in FILES:
+            (self.output / name).write_text(f"last-good:{name}\n", encoding="utf-8")
+
+        result = self.publish(expect_success=True)
+        self.assertIn("published complete validated card set and matching UTC date", result.stdout)
+        initialized = run_git(self.work, "rev-parse", "HEAD")
+        changed = set(run_git(self.work, "diff-tree", "--no-commit-id", "--name-only", "-r", initialized).splitlines())
+        self.assertEqual(changed, {"README.md"})
+        initialized_readme = run_git(self.work, "show", f"{initialized}:README.md")
+        initialized_date = extract_date_line(initialized_readme)
+        self.assertIsNotNone(initialized_date)
+        self.assertEqual(initialized_readme, update_readme_date(original_readme, initialized_date[0]))
+        for name in FILES:
+            self.assertEqual(
+                run_git(self.work, "show", f"{initialized}:{ASSETS[FILES.index(name)]}"),
+                f"last-good:{name}",
+            )
+        self.assertEqual(run_git(self.work, "ls-remote", "origin", "refs/heads/main").split()[0], initialized)
+
+        self.env["BASELINE_SHA"] = initialized
+        result = self.publish(expect_success=True)
+        self.assertIn("existing cards and refresh date were preserved", result.stdout)
+        self.assertEqual(run_git(self.work, "rev-parse", "HEAD"), initialized)
+        self.assertEqual(run_git(self.work, "ls-remote", "origin", "refs/heads/main").split()[0], initialized)
+
+    def test_failed_initial_date_only_publication_preserves_remote(self):
+        original_readme = PRESERVED_README + PROFILE_DETAILS_LINE
+        (self.work / "README.md").write_text(original_readme, encoding="utf-8")
+        run_git(self.work, "add", "README.md")
+        run_git(self.work, "commit", "--amend", "--no-edit")
+        run_git(self.work, "push", "--force", "origin", "main")
+        self.baseline = run_git(self.work, "rev-parse", "HEAD")
+        self.env["BASELINE_SHA"] = self.baseline
+        for name in FILES:
+            (self.output / name).write_text(f"last-good:{name}\n", encoding="utf-8")
+        hook = self.work / ".git/hooks/pre-push"
+        hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        hook.chmod(0o755)
+
+        result = self.publish(expect_success=False)
+        self.assertIn("last-good five-card hashes and refresh date are unchanged", result.stderr.casefold())
+        self.assertEqual(run_git(self.work, "ls-remote", "origin", "refs/heads/main").split()[0], self.baseline)
+        self.assertEqual(run_git(self.work, "show", f"{self.baseline}:README.md"), original_readme)
+        self.assertIsNone(extract_date_line(run_git(self.work, "show", f"{self.baseline}:README.md")))
+        for name in FILES:
+            self.assertEqual(
+                run_git(self.work, "show", f"{self.baseline}:{ASSETS[FILES.index(name)]}"),
+                f"last-good:{name}",
+            )
+
     def test_incomplete_input_and_rejected_push_preserve_then_recover(self):
         missing = self.output / FILES[-1]
         missing.unlink()

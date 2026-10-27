@@ -74,18 +74,22 @@ def main() -> None:
     checked_out_readme = Path("README.md").read_text(encoding="utf-8")
     if checked_out_readme != baseline_readme:
         raise SystemExit("Checked-out README differs from the verified baseline; refusing publication.")
+    try:
+        baseline_date = extract_date_line(baseline_readme)
+    except ValueError as error:
+        raise SystemExit(f"README refresh-date validation refused: {error}") from error
 
     runner_temp = Path(os.environ["RUNNER_TEMP"]).resolve()
     source = Path(os.environ["VERIFIED_CARDS_DIR"]).resolve()
     if runner_temp not in source.parents:
         raise SystemExit("Verified cards must be downloaded inside RUNNER_TEMP.")
     new_hashes = hashes(source)
-    if baseline_hashes == new_hashes:
+    if baseline_hashes == new_hashes and baseline_date is not None:
         print("PASS: generated cards are unchanged; existing cards and refresh date were preserved without a commit or push.")
         return
 
     # Capture the UTC publication-commit time only after the complete generated
-    # set has been validated and compared with the current published set.
+    # set has been validated and the date/card state has been compared.
     publication_time = utc_publication_timestamp()
     publication_date = publication_time.date().isoformat()
     try:
@@ -104,7 +108,7 @@ def main() -> None:
     staged = set(git("diff", "--cached", "--name-only").stdout.splitlines())
     if staged - allowed:
         raise SystemExit(f"Unexpected staged paths: {sorted(staged - allowed)}")
-    if not (staged & allowed_assets):
+    if baseline_hashes != new_hashes and not (staged & allowed_assets):
         raise SystemExit("Card hashes changed, but no card asset was staged; refusing a date-only publication.")
     git("diff", "--cached", "--check")
     if not staged:
@@ -131,7 +135,8 @@ def main() -> None:
     parent = git("rev-parse", f"{commit}^1").stdout.strip()
     changed = set(git("diff-tree", "--no-commit-id", "--name-only", "-r", commit).stdout.splitlines())
     committed_assets = changed & allowed_assets
-    if parent != baseline or not committed_assets or changed - allowed:
+    date_only_initialization = baseline_hashes == new_hashes and baseline_date is None
+    if parent != baseline or (not committed_assets and not date_only_initialization) or changed - allowed:
         raise SystemExit("Publication commit is not based on the verified baseline or contains an unexpected path.")
     committed_readme = git("show", f"{commit}:README.md").stdout
     if extract_date_line(committed_readme) is None or extract_date_line(committed_readme)[0] != publication_date:
