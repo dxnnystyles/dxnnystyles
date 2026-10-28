@@ -1,6 +1,8 @@
 name: Refresh public summary cards
 
 on:
+  schedule:
+    - cron: '31 7 * * *'
   workflow_dispatch:
 
 # Manual refreshes are serialized. Active publication is not canceled; queued
