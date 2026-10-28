@@ -12,8 +12,8 @@ import xml.etree.ElementTree as ET
 EXPECTED = {
     "0-profile-details.svg": (
         700,
-        380,
-        ("All-time", "contributions", "Public repos", "Joined GitHub", "last year", "monthly totals aggregated"),
+        200,
+        ("All-time", "contributions", "Public repos", "non-fork", "GitHub account age"),
     ),
     "1-repos-per-language.svg": (340, 200, ("Top Languages by Repo",)),
     "2-most-commit-language.svg": (340, 200, ("Top Languages by Commit",)),
@@ -98,16 +98,10 @@ def validate_card_set(directory: Path) -> tuple[list[tuple[str, ET.Element, str,
                 raise SystemExit("Profile Details does not identify the requested account.")
             if any(marker in lowered for marker in CONTACT_MARKERS):
                 raise SystemExit("Profile Details contains contact/personal metadata markers.")
-            if not any(local_name(node.tag) == "path" and node.attrib.get("d", "").strip() for node in nodes):
-                raise SystemExit("Profile Details contribution visualization is missing.")
-            month_ticks = [
-                (node.text or "").strip()
-                for node in nodes
-                if local_name(node.tag) == "text" and re.fullmatch(r"(\d{2})/(0[1-9]|1[0-2])", (node.text or "").strip())
-            ]
-            month_keys = [int(value[:2]) * 12 + int(value[3:]) for value in month_ticks]
-            if len(month_ticks) != 3 or len(set(month_ticks)) != 3 or month_keys != sorted(month_keys):
-                raise SystemExit(f"Profile Details must expose three chronological readable month ticks; found {month_ticks}.")
+            if any(marker in lowered for marker in ("contribution graph", "contributions in the last year", "monthly totals", "contributioncalendar")):
+                raise SystemExit("Profile Details must omit its contribution chart and rolling-calendar labels.")
+            if "contact fields and the contribution chart are omitted" not in lowered:
+                raise SystemExit("Profile Details description must identify omitted contact fields and chart.")
         if name == "4-productive-time.svg":
             bars = [node for node in nodes if local_name(node.tag) == "rect" and node.attrib.get("class") == "bar"]
             if len(bars) != 24:
@@ -145,8 +139,13 @@ def main() -> None:
         manifest = args.directory / "verification.txt"
         if manifest.exists():
             contents = manifest.read_text(encoding="utf-8")
-            if "candidate_sha=" not in contents or "source_account=dxnnystyles" not in contents:
+            manifest_values = dict(line.split("=", 1) for line in contents.splitlines() if "=" in line)
+            if manifest_values.get("candidate_sha") != os.environ.get("SUMMARY_CARDS_CANDIDATE_SHA"):
+                raise SystemExit("Verification artifact does not identify the exact pinned generator candidate.")
+            if manifest_values.get("source_account") != "dxnnystyles" or manifest_values.get("private_contribution_scope") != "none":
                 raise SystemExit("Verification artifact has incomplete provenance.")
+        elif os.environ.get("SUMMARY_CARDS_CANDIDATE_SHA"):
+            raise SystemExit("The transferred generator artifact is missing its provenance manifest.")
         print("PASS complete five-card set revalidated without modifying it.")
         return
 

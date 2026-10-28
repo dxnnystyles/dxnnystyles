@@ -59,6 +59,15 @@ def remote_readme(commit: str) -> str:
     return result.stdout
 
 
+def report_change_state(has_changes: bool) -> None:
+    value = "true" if has_changes else "false"
+    print(f"HAS_CHANGES={value}")
+    output = os.environ.get("GITHUB_OUTPUT")
+    if output:
+        with open(output, "a", encoding="utf-8") as stream:
+            stream.write(f"has_changes={value}\n")
+
+
 def main() -> None:
     baseline = os.environ.get("BASELINE_SHA", "")
     if not baseline or git("rev-parse", "HEAD").stdout.strip() != baseline:
@@ -86,6 +95,7 @@ def main() -> None:
     new_hashes = hashes(source)
     if baseline_hashes == new_hashes and baseline_date is not None:
         print("PASS: generated cards are unchanged; existing cards and refresh date were preserved without a commit or push.")
+        report_change_state(False)
         return
 
     # Capture the UTC publication-commit time only after the complete generated
@@ -114,10 +124,10 @@ def main() -> None:
     if not staged:
         raise SystemExit("Card output changed but no publication files were staged.")
 
-    # Recheck the target immediately before commit/push; concurrency serializes
+    # Recheck the target immediately before creating the local publication commit; concurrency serializes
     # refresh runs, while this also detects unrelated external main movement.
     if remote_head() != baseline:
-        raise SystemExit("Remote main moved before commit; refusing publication.")
+        raise SystemExit("Remote main moved before commit; refusing to prepare a stale publication.")
 
     git("config", "user.name", "github-actions[bot]")
     git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
@@ -142,31 +152,8 @@ def main() -> None:
     if extract_date_line(committed_readme) is None or extract_date_line(committed_readme)[0] != publication_date:
         raise SystemExit("Publication commit does not include the matching complete-set refresh date.")
 
-    if remote_head() != baseline:
-        raise SystemExit("Remote main moved before push; no candidate commit was pushed.")
-    pushed = git("push", "origin", f"HEAD:refs/heads/{BRANCH}", check=False)
-    observed_remote = remote_head()
-    if observed_remote != baseline and observed_remote != commit:
-        # A concurrent external update may not exist in this checkout yet.
-        # Fetch it read-only before comparing the prior and current card sets.
-        git("fetch", "origin", BRANCH, check=False)
-    published_hashes = remote_asset_hashes(observed_remote)
-    published_readme = remote_readme(observed_remote)
-    published_date = extract_date_line(published_readme)
-    if observed_remote == commit and published_hashes == new_hashes and published_date is not None and published_date[0] == publication_date:
-        print(f"PASS: published complete validated card set and matching UTC date in one commit: {commit}; changed {len(committed_assets)} card file(s).")
-        if pushed.returncode != 0:
-            print("NOTICE: push reported an error after GitHub accepted the complete commit; remote ref and hashes verified.")
-        return
-    baseline_date = extract_date_line(baseline_readme)
-    if pushed.returncode != 0 and baseline_hashes is not None and published_hashes == baseline_hashes and published_readme == baseline_readme and published_date == baseline_date:
-        raise SystemExit("Push failed or was rejected; remote last-good five-card hashes and refresh date are unchanged. Rerun after resolving the push issue.")
-    if pushed.returncode != 0 and observed_remote == baseline:
-        raise SystemExit("Push failed; remote main remains at the last-good cards and refresh date. Rerun after resolving the push issue.")
-    if observed_remote != commit:
-        raise SystemExit("Remote main does not point to the complete publication commit; inspect remote state before recovery.")
-    if published_hashes != new_hashes or published_date is None or published_date[0] != publication_date:
-        raise SystemExit("Remote cards or refresh date do not match the complete validated publication.")
+    print(f"PASS: prepared complete five-card publication commit {commit}; changed {len(committed_assets)} card file(s) and the matching hidden UTC provenance marker.")
+    report_change_state(True)
 
 
 if __name__ == "__main__":

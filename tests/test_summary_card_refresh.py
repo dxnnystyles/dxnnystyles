@@ -45,12 +45,13 @@ class RefreshHardeningTests(unittest.TestCase):
         original = PRESERVED_README + PROFILE_DETAILS_LINE + "\n"
         first = update_readme_date(original, "2000-01-01")
         second = update_readme_date(first, "2026-10-26")
-        old_line = '<p align="center"><sub>Profile snapshot · Updated <strong>2000-01-01</strong></sub></p>'
-        new_line = '<p align="center"><sub>Profile snapshot · Updated <strong>2026-10-26</strong></sub></p>'
+        old_line = "<!-- profile-snapshot-date: 2000-01-01 -->"
+        new_line = "<!-- profile-snapshot-date: 2026-10-26 -->"
         self.assertEqual(second, first.replace(old_line, new_line, 1))
         self.assertTrue(second.index(new_line) < second.index(PROFILE_DETAILS_LINE))
         self.assertEqual(extract_date_line(second)[0], "2026-10-26")
-        self.assertEqual(second.count("Profile snapshot · Updated"), 1)
+        self.assertEqual(second.count("profile-snapshot-date:"), 1)
+        self.assertNotIn("Profile snapshot · Updated", second)
 
     def test_malformed_or_partial_generated_set_is_rejected_before_publisher(self):
         self.assertEqual(run_git(self.work, "rev-parse", "HEAD"), self.baseline)
@@ -90,17 +91,55 @@ class RefreshHardeningTests(unittest.TestCase):
         self.assertIn("queue: max", workflow)
         self.assertIn("cancel-in-progress: false", workflow)
         self.assertIn("actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8", workflow)
+        self.assertIn("git clone --no-tags --single-branch --branch main", workflow)
+        self.assertIn("git push \"https://github.com/$GITHUB_REPOSITORY.git\" HEAD:main", workflow)
+        self.assertIn("name: Push the prepared complete card update", workflow)
+        self.assertIn("name: Verify the prepared commit is now the remote baseline", workflow)
+        self.assertIn("contents: write", workflow)
+        self.assertIn("report_change_state", PUBLISHER.read_text(encoding="utf-8"))
+        self.assertNotIn('git("push"', PUBLISHER.read_text(encoding="utf-8"))
         self.assertIn("actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444", workflow)
         self.assertIn("actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f", workflow)
+        self.assertIn("path: ${{ runner.temp }}/summary-cards-verified/", workflow)
         self.assertIn("actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333", workflow)
-        self.assertIn("uses: dxnnystyles/github-profile-summary-cards@c4381200d1eabe72d08bbafd2911c26cb0cddf03", workflow)
-        self.assertIn("SUMMARY_CARDS_CANDIDATE_SHA: c4381200d1eabe72d08bbafd2911c26cb0cddf03", workflow)
+        self.assertIn("digest-mismatch: error", workflow)
+        self.assertIn("uses: dxnnystyles/github-profile-summary-cards@179a08d62b489701d4e902495386d64367ea8003", workflow)
+        self.assertIn("SUMMARY_CARDS_CANDIDATE_SHA: 179a08d62b489701d4e902495386d64367ea8003", workflow)
         self.assertIn("if: github.ref == 'refs/heads/main'", workflow)
         self.assertIn("needs.generate.result == 'success' && github.ref == 'refs/heads/main'", workflow)
         self.assertIn("AUTO_PUSH: false", workflow)
         self.assertIn("permissions: {}", workflow)
         self.assertIn("contents: read", workflow)
         self.assertIn("contents: write", workflow)
+
+    def test_transferred_artifact_requires_exact_generator_and_public_account_provenance(self):
+        artifact = self.root / "artifact-with-manifest"
+        artifact.mkdir()
+        for name in FILES:
+            shutil.copy2(REPO / "assets/summary-cards" / name, artifact / name)
+        candidate = "179a08d62b489701d4e902495386d64367ea8003"
+        (artifact / "verification.txt").write_text(
+            f"candidate_sha={candidate}\nsource_account=dxnnystyles\nprivate_contribution_scope=none\n",
+            encoding="utf-8",
+        )
+        env = os.environ.copy()
+        env["SUMMARY_CARDS_CANDIDATE_SHA"] = candidate
+        verified = subprocess.run(
+            ["python3", str(VALIDATOR), "--directory", str(artifact), "--no-copy"],
+            env=env, capture_output=True, text=True,
+        )
+        self.assertEqual(verified.returncode, 0, verified.stdout + verified.stderr)
+
+        (artifact / "verification.txt").write_text(
+            "candidate_sha=0000000000000000000000000000000000000000\nsource_account=dxnnystyles\nprivate_contribution_scope=none\n",
+            encoding="utf-8",
+        )
+        wrong_revision = subprocess.run(
+            ["python3", str(VALIDATOR), "--directory", str(artifact), "--no-copy"],
+            env=env, capture_output=True, text=True,
+        )
+        self.assertNotEqual(wrong_revision.returncode, 0)
+        self.assertIn("exact pinned generator candidate", wrong_revision.stderr)
 
     def test_current_visual_branch_cards_pass_profile_verification(self):
         result = subprocess.run(
@@ -110,7 +149,7 @@ class RefreshHardeningTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("0-profile-details.svg", result.stdout)
-        self.assertIn("700x380", result.stdout)
+        self.assertIn("700x200", result.stdout)
         self.assertIn("PASS complete five-card set", result.stdout)
 
     def test_validator_refuses_conflicting_copy_options(self):
@@ -131,6 +170,7 @@ class RefreshHardeningTests(unittest.TestCase):
         self.racer = self.root / "racer"
         self.runner_temp = self.root / "runner-temp"
         self.output = self.runner_temp / "verified-cards"
+        self.github_output = self.runner_temp / "github-output.txt"
         self.runner_temp.mkdir()
         subprocess.run(["git", "init", "--bare", str(self.remote)], check=True, capture_output=True)
         subprocess.run(["git", "init", str(self.work)], check=True, capture_output=True)
@@ -161,12 +201,14 @@ class RefreshHardeningTests(unittest.TestCase):
             "BASELINE_SHA": self.baseline,
             "RUNNER_TEMP": str(self.runner_temp),
             "VERIFIED_CARDS_DIR": str(self.output),
+            "GITHUB_OUTPUT": str(self.github_output),
         })
 
     def tearDown(self):
         self.tmp.cleanup()
 
-    def publish(self, expect_success: bool):
+    def prepare(self, expect_success: bool = True):
+        self.github_output.write_text("", encoding="utf-8")
         result = subprocess.run(
             ["python3", "scripts/publish_summary_cards.py"],
             cwd=self.work,
@@ -177,10 +219,27 @@ class RefreshHardeningTests(unittest.TestCase):
         self.assertEqual(result.returncode == 0, expect_success, result.stdout + result.stderr)
         return result
 
+    def push_prepared(self, expect_success: bool = True):
+        result = subprocess.run(
+            ["git", "push", "origin", "HEAD:refs/heads/main"],
+            cwd=self.work,
+            env=self.env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode == 0, expect_success, result.stdout + result.stderr)
+        return result
+
+    def publish(self, expect_success: bool = True):
+        result = self.prepare(expect_success)
+        if expect_success and "has_changes=true" in self.github_output.read_text(encoding="utf-8"):
+            self.push_prepared()
+        return result
+
     def test_atomic_success_and_unchanged_noop(self):
         baseline_readme = run_git(self.work, "show", f"{self.baseline}:README.md")
         result = self.publish(expect_success=True)
-        self.assertIn("published complete validated card set and matching UTC date", result.stdout)
+        self.assertIn("prepared complete five-card publication commit", result.stdout)
         first = run_git(self.work, "rev-parse", "HEAD")
         self.assertEqual(run_git(self.work, "rev-parse", f"{first}^1"), self.baseline)
         changed = set(run_git(self.work, "diff-tree", "--no-commit-id", "--name-only", "-r", first).splitlines())
@@ -210,7 +269,7 @@ class RefreshHardeningTests(unittest.TestCase):
         self.env["BASELINE_SHA"] = self.baseline
 
         result = self.publish(expect_success=True)
-        self.assertIn("published complete validated card set and matching UTC date", result.stdout)
+        self.assertIn("prepared complete five-card publication commit", result.stdout)
         published = run_git(self.work, "rev-parse", "HEAD")
         readme = subprocess.run(
             ["git", "show", f"{published}:README.md"],
@@ -236,7 +295,7 @@ class RefreshHardeningTests(unittest.TestCase):
             (self.output / name).write_text(f"last-good:{name}\n", encoding="utf-8")
 
         result = self.publish(expect_success=True)
-        self.assertIn("published complete validated card set and matching UTC date", result.stdout)
+        self.assertIn("prepared complete five-card publication commit", result.stdout)
         initialized = run_git(self.work, "rev-parse", "HEAD")
         changed = set(run_git(self.work, "diff-tree", "--no-commit-id", "--name-only", "-r", initialized).splitlines())
         self.assertEqual(changed, {"README.md"})
@@ -271,8 +330,9 @@ class RefreshHardeningTests(unittest.TestCase):
         hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
         hook.chmod(0o755)
 
-        result = self.publish(expect_success=False)
-        self.assertIn("last-good five-card hashes and refresh date are unchanged", result.stderr.casefold())
+        result = self.prepare(expect_success=True)
+        self.assertIn("has_changes=true", self.github_output.read_text(encoding="utf-8"))
+        self.push_prepared(expect_success=False)
         self.assertEqual(run_git(self.work, "ls-remote", "origin", "refs/heads/main").split()[0], self.baseline)
         self.assertEqual(run_git(self.work, "show", f"{self.baseline}:README.md"), original_readme)
         self.assertIsNone(extract_date_line(run_git(self.work, "show", f"{self.baseline}:README.md")))
@@ -285,7 +345,7 @@ class RefreshHardeningTests(unittest.TestCase):
     def test_incomplete_input_and_rejected_push_preserve_then_recover(self):
         missing = self.output / FILES[-1]
         missing.unlink()
-        result = self.publish(expect_success=False)
+        result = self.prepare(expect_success=False)
         self.assertIn("Expected exactly five SVGs", result.stderr)
         self.assertEqual(run_git(self.work, "rev-parse", "HEAD"), self.baseline)
         self.assertEqual(run_git(self.work, "ls-remote", "origin", "refs/heads/main").split()[0], self.baseline)
@@ -309,9 +369,9 @@ class RefreshHardeningTests(unittest.TestCase):
         )
         hook.chmod(0o755)
         self.env["RACE_REPO"] = str(self.racer)
-        result = self.publish(expect_success=False)
-        self.assertIn("last-good five-card hashes and refresh date are unchanged", result.stderr.casefold())
+        result = self.prepare(expect_success=True)
         remote_after_race = run_git(self.racer, "rev-parse", "HEAD")
+        self.push_prepared(expect_success=False)
         self.assertEqual(run_git(self.racer, "ls-remote", "origin", "refs/heads/main").split()[0], remote_after_race)
         self.assertEqual(run_git(self.racer, "show", f"{remote_after_race}:README.md"), baseline_readme)
         for name in FILES:
@@ -325,7 +385,7 @@ class RefreshHardeningTests(unittest.TestCase):
         run_git(self.work, "reset", "--hard", "origin/main")
         self.env["BASELINE_SHA"] = remote_after_race
         result = self.publish(expect_success=True)
-        self.assertIn("published complete validated card set and matching UTC date", result.stdout)
+        self.assertIn("prepared complete five-card publication commit", result.stdout)
         recovered = run_git(self.work, "rev-parse", "HEAD")
         self.assertEqual(run_git(self.work, "rev-parse", f"{recovered}^1"), remote_after_race)
         recovered_paths = set(run_git(self.work, "diff-tree", "--no-commit-id", "--name-only", "-r", recovered).splitlines())

@@ -19,6 +19,12 @@ EXPECTED_URLS = {
 }
 TECH = ("swift", "python", "shell", "javascript", "html", "css", "typescript", "nodejs", "vite", "react", "nextjs", "astro", "supabase")
 TECH_LABELS = ("Swift", "Python", "Shell", "JavaScript", "HTML", "CSS", "TypeScript", "Node.js", "Vite", "React", "Next.js", "Astro", "Supabase")
+TECH_BACKGROUNDS = {
+    "swift": "#B23C1F", "python": "#1E5B82", "shell": "#A44800", "javascript": "#5D5310",
+    "html": "#A63E00", "css": "#1150A0", "typescript": "#175A9A", "nodejs": "#25652C",
+    "vite": "#4936A5", "react": "#065D73", "nextjs": "#3B3B3B", "astro": "#762AA5", "supabase": "#126B4E",
+}
+SVG_NS = "{http://www.w3.org/2000/svg}"
 GRID_ASSETS = {
     f"assets/tech/technology-grid-{layout}-{theme}.svg"
     for layout in ("desktop", "mobile")
@@ -51,6 +57,12 @@ class Markup(HTMLParser):
         if tag == "p" and self._current_p is not None:
             self.paragraph_images.append(self._current_p); self._current_p = None
 
+class VisibleText(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(); self.parts: list[str] = []
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
+
 def fail(message: str) -> None:
     print(f"FAIL: {message}", file=sys.stderr); raise SystemExit(1)
 
@@ -59,7 +71,7 @@ def main() -> None:
     parser_args.add_argument(
         "--require-refresh-date",
         action="store_true",
-        help="Fail if the first changed successful card refresh has not populated the visible date yet.",
+        help="Fail if the first successful complete refresh has not populated the hidden provenance marker yet.",
     )
     args = parser_args.parse_args()
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -68,15 +80,27 @@ def main() -> None:
     except ValueError as error:
         fail(str(error))
     if refresh_date is None and args.require_refresh_date:
-        fail("the visible refresh date is not initialized; it is added after a changed complete card set publishes successfully")
+        fail("the internal snapshot marker is not initialized; it is added after a successful complete refresh")
+    if "Profile snapshot · Updated" in readme:
+        fail("the internal refresh date must not be displayed as a README caption")
+    visible=VisibleText(); visible.feed(readme)
+    if "profile-snapshot-date:" in "".join(visible.parts):
+        fail("the internal snapshot marker must remain an HTML comment, not visible profile text")
     if '<h1 align="center">dxnnystyles</h1>\n<p align="center">Software · Chess · Music</p>' not in readme:
         fail("centered H1 identity and directly following subtitle are required")
     if re.search(r"^#{1,6}\s", readme, flags=re.MULTILINE) or "Beyond code" in readme.casefold():
-        fail("Markdown section headings or removed section remain")
-    if re.search(r"<h[2-6]\b", readme, flags=re.IGNORECASE):
-        fail("standalone headings after the identity must be removed")
-    if any(label in readme for label in ("GitHub activity", "3D Night View · public contribution calendar", "GitHub Stats · Repository Languages", "Recent Public Events")):
-        fail("standalone widget section labels must not remain")
+        fail("Markdown section headings or the removed Beyond Code section remain")
+    headings = re.findall(r"<(h[2-6]) align=\"center\">(.*?)</\1>", readme, flags=re.IGNORECASE)
+    expected_headings = [
+        ("h2", "Apps &amp; Scripting"),
+        ("h2", "Web"),
+        ("h2", "GitHub Activity"),
+        ("h2", "Stats"),
+        ("h2", "Projects"),
+        ("h2", "Music / Other"),
+    ]
+    if headings != expected_headings or len(re.findall(r"<h[2-6]\b", readme, flags=re.IGNORECASE)) != 6:
+        fail("the six approved centered section headings, in order and with consistent markup, are required")
     if readme.count("assets/hoops/hoops-profile-dark-panel.svg") != 1: fail("fixed dark Hoops panel is not the single displayed Hoops asset")
     if "Danny Styles - slappywax" not in readme or readme.count("https://open.spotify.com/album/0aLqVmlz4ytvJRcGKW8q4D") != 1:
         fail("exact slappywax wording/link is missing or duplicated")
@@ -108,6 +132,10 @@ def main() -> None:
     if any(position<0 for position in positions) or positions!=sorted(positions):
         fail("technology categories, subgroups, and spoken-language labels are missing or out of order")
     if readme.count('align="center"') < 8: fail("identity, technology labels, and widget rows must remain centered")
+    anchors=("assets/summary-cards/0-profile-details.svg","assets/hoops/hoops-profile-dark-panel.svg","assets/3d/profile-night-view.svg","assets/summary-cards/3-stats.svg","assets/summary-cards/2-most-commit-language.svg","assets/browser-chess-launcher.svg","assets/music/slappywax-cover.jpg")
+    positions=[readme.find(anchor) for anchor in anchors]
+    if any(position<0 for position in positions) or positions!=sorted(positions):
+        fail("Profile Details must precede Hoops, with the five-card set after Hoops and Neon Ember")
     if parser.urls != EXPECTED_URLS: fail(f"destinations differ: {sorted(parser.urls ^ EXPECTED_URLS)}")
     for target in references:
         if not (ROOT / target).is_file(): fail(f"missing image {target}")
@@ -118,8 +146,28 @@ def main() -> None:
         path=ROOT/f"assets/tech/{name}.svg"
         root=ET.parse(path).getroot()
         title=root.find("{http://www.w3.org/2000/svg}title")
-        if title is None or not (title.text or "").strip(): fail(f"technology badge lacks accessible title: {name}")
-    ns="{http://www.w3.org/2000/svg}"
+        desc=root.find("{http://www.w3.org/2000/svg}desc")
+        label=root.find("{http://www.w3.org/2000/svg}text")
+        rect=root.find("{http://www.w3.org/2000/svg}rect")
+        if root.get("role")!="img" or title is None or title.text!=TECH_LABELS[TECH.index(name)] or desc is None:
+            fail(f"technology badge lacks its accessible name/description: {name}")
+        if (root.get("height"), root.get("viewBox", "").split()[-1]) != ("32", "32") or rect is None or rect.get("fill")!=TECH_BACKGROUNDS[name]:
+            fail(f"technology badge is not a consistent solid brand-color chip: {name}")
+        if label is None or label.text!=TECH_LABELS[TECH.index(name)] or label.get("fill")!="#FFFFFF":
+            fail(f"technology badge lacks readable white label text: {name}")
+        if root.find(f"{SVG_NS}svg") is None:
+            fail(f"technology badge must retain its vector logo: {name}")
+        if any(node.tag.endswith(("linearGradient", "radialGradient", "filter")) for node in root.iter()):
+            fail(f"technology badge must not use mixed gradient/filter styling: {name}")
+        background=TECH_BACKGROUNDS[name]
+        def luminance(color: str) -> float:
+            channels=[int(color[index:index+2],16)/255 for index in (1,3,5)]
+            linear=[value/12.92 if value<=0.04045 else ((value+0.055)/1.055)**2.4 for value in channels]
+            return .2126*linear[0]+.7152*linear[1]+.0722*linear[2]
+        contrast=1.05/(luminance(background)+.05)
+        if contrast<5:
+            fail(f"technology badge label contrast is below 5:1: {name} ({contrast:.2f}:1)")
+    ns=SVG_NS
     for path in sorted((ROOT/"assets").rglob("*.svg")):
         try: root=ET.parse(path).getroot()
         except ET.ParseError as exc: fail(f"invalid SVG {path.relative_to(ROOT)}: {exc}")
@@ -136,16 +184,18 @@ def main() -> None:
         if chart.get("role")!="img" or chart.find(f"{ns}title") is None or chart.find(f"{ns}desc") is None:
             fail(f"summary card needs intrinsic accessible naming: {chart_path.relative_to(ROOT)}")
     details=ET.parse(ROOT/"assets/summary-cards/0-profile-details.svg").getroot()
-    details_text=" ".join(node.text or "" for node in details.iter() if node.tag.endswith("text"))
+    details_text=" ".join(node.text or "" for node in details.iter())
     if re.search(r"\b(?:email|company|location|website|twitter)\b|[\w.+-]+@[\w.-]+\.[a-z]{2,}",details_text,re.I):
         fail("Profile Details contains contact metadata")
-    if (details.get("width"), details.get("height"), details.get("viewBox")) != ("700", "380", "0 0 700 380"):
-        fail("Profile Details must remain the wide 700x380 feature card")
+    if (details.get("width"), details.get("height"), details.get("viewBox")) != ("700", "200", "0 0 700 200"):
+        fail("Profile Details must use the compact responsive 700x200 layout")
     details_desc = details.find(f"{ns}desc")
-    if details_desc is None or "all-time contribution total" not in (details_desc.text or "") or "monthly totals aggregated" not in (details_desc.text or ""):
-        fail("Profile Details must distinguish the all-time total from the trailing-year monthly chart")
-    if not all(label in details_text for label in ("All-time", "contributions", "Public repos", "Joined GitHub", "contributions in the last year")):
-        fail("Profile Details is missing its approved labels or rolling-year chart caption")
+    if details_desc is None or "all-time contributions" not in (details_desc.text or "") or "contribution chart are omitted" not in (details_desc.text or ""):
+        fail("Profile Details must describe public totals and omitted chart/contact fields")
+    if not all(label in details_text for label in ("All-time", "contributions", "Public repos", "non-fork", "GitHub account age")):
+        fail("Profile Details is missing its approved public statistics labels")
+    if re.search(r"contribution graph|contributions in the last year|monthly totals|\b\d{2}/(?:0[1-9]|1[0-2])\b",details_text,re.I):
+        fail("Profile Details must not render a contribution chart or rolling-calendar labels")
     for filename in ("1-repos-per-language.svg","2-most-commit-language.svg","3-stats.svg","4-productive-time.svg"):
         card=ET.parse(ROOT/"assets/summary-cards"/filename).getroot()
         if (card.get("width"),card.get("height"),card.get("viewBox"))!=("340","200","0 0 340 200"):
@@ -165,6 +215,12 @@ def main() -> None:
         fail("Hoops must generate and validate outside tracked assets before promotion")
     if any(name not in workflow for name in ("hoops.svg", "hoops-dark.svg", "hoops-profile-dark-panel.svg")):
         fail("Hoops publication must include both generator outputs and the README-displayed panel")
+    chess=ET.parse(ROOT/"assets/browser-chess-launcher.svg").getroot()
+    chess_bg=next((node.get("fill") for node in chess if node.tag.endswith("rect") and node.get("width")=="900"),None)
+    if chess_bg!="#161b22" or "#66DEAD" not in " ".join(node.attrib.get("stroke","")+node.attrib.get("fill","") for node in chess.iter()):
+        fail("Browser Chess launcher must retain the approved charcoal and mint palette")
+    if "Dead Pixel Club" not in (chess.find(f"{ns}desc").text or "") or "DEAD PIXEL CLUB" not in " ".join(node.text or "" for node in chess.iter()):
+        fail("Browser Chess launcher must retain its restrained Dead Pixel Club identity")
     actual={p.relative_to(ROOT).as_posix() for p in ROOT.rglob("*") if p.is_file() and ".git" not in p.parts and "__pycache__" not in p.parts}
     if actual != ALLOWED: fail(f"public allowlist differs: {sorted(actual ^ ALLOWED)}")
     for old in ("assets/stats/github-public-stats.svg", "assets/stats/repository-languages.svg", "assets/activity/public-events-sample.svg"):

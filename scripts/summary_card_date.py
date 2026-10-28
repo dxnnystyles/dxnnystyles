@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
-"""Shared parsing and formatting for the five-card refresh date."""
+"""Shared parsing and formatting for internal five-card refresh provenance."""
 
 from datetime import date, datetime, timezone
 import re
 
 
-DATE_MARKER = "Profile snapshot · Updated"
-DATE_LINE_PATTERN = re.compile(
-    r"<p align=\"center\"><sub>Profile snapshot · Updated "
-    r"<strong>(\d{4}-\d{2}-\d{2})</strong></sub></p>"
-)
+DATE_MARKER = "profile-snapshot-date:"
+DATE_LINE_PATTERN = re.compile(r"<!-- profile-snapshot-date: (\d{4}-\d{2}-\d{2}) -->")
 PROFILE_DETAILS_ANCHOR = '<p align="center"><img src="assets/summary-cards/0-profile-details.svg"'
 
 
@@ -22,17 +19,14 @@ def utc_publication_timestamp(now: datetime | None = None) -> datetime:
 
 
 def format_date_line(updated_date: str) -> str:
-    """Render a theme-adaptive, centered native GitHub Markdown date line."""
+    """Store the refresh date in a non-rendered, machine-readable comment."""
     try:
         parsed = date.fromisoformat(updated_date)
     except ValueError as error:
         raise ValueError("Refresh date must be a valid YYYY-MM-DD date.") from error
     if parsed.isoformat() != updated_date:
         raise ValueError("Refresh date must use canonical YYYY-MM-DD format.")
-    return (
-        '<p align="center"><sub>Profile snapshot · Updated '
-        f"<strong>{updated_date}</strong></sub></p>"
-    )
+    return f"<!-- profile-snapshot-date: {updated_date} -->"
 
 
 def extract_date_line(readme: str) -> tuple[str, int, int] | None:
@@ -41,7 +35,7 @@ def extract_date_line(readme: str) -> tuple[str, int, int] | None:
     if marker_count == 0:
         return None
     if marker_count != 1:
-        raise ValueError("README must contain at most one Profile snapshot date line.")
+        raise ValueError("README must contain at most one internal profile snapshot date marker.")
 
     anchor_count = readme.count(PROFILE_DETAILS_ANCHOR)
     if anchor_count != 1:
@@ -50,17 +44,17 @@ def extract_date_line(readme: str) -> tuple[str, int, int] | None:
     prefix = readme[:anchor_index]
     nonempty_lines = [(line, start, end) for line, start, end in _line_ranges(prefix) if line.strip()]
     if not nonempty_lines:
-        raise ValueError("Profile snapshot date must immediately precede the Profile Details card.")
+        raise ValueError("Internal profile snapshot date marker must immediately precede the Profile Details card.")
     line, start, end = nonempty_lines[-1]
     match = DATE_LINE_PATTERN.fullmatch(line.strip())
     if not match:
-        raise ValueError("Profile snapshot date line has unexpected markup or placement.")
+        raise ValueError("Internal profile snapshot date marker has unexpected markup or placement.")
     try:
         parsed = date.fromisoformat(match.group(1))
     except ValueError as error:
-        raise ValueError("Profile snapshot date is not a valid calendar date.") from error
+        raise ValueError("Internal profile snapshot date is not a valid calendar date.") from error
     if parsed.isoformat() != match.group(1):
-        raise ValueError("Profile snapshot date must use canonical YYYY-MM-DD format.")
+        raise ValueError("Internal profile snapshot date must use canonical YYYY-MM-DD format.")
     return match.group(1), start, end
 
 
@@ -75,7 +69,7 @@ def _line_ranges(value: str):
 
 
 def update_readme_date(readme: str, updated_date: str) -> str:
-    """Insert or update only the shared date immediately above Profile Details."""
+    """Insert or update only the hidden provenance marker before Profile Details."""
     new_line = format_date_line(updated_date)
     existing = extract_date_line(readme)
     if existing is not None:

@@ -3,8 +3,8 @@ name: Refresh public summary cards
 on:
   workflow_dispatch:
 
-# Scheduled and manual runs share one queue. Active publication is not canceled;
-# queued runs wait up to GitHub's concurrency-group limit.
+# Manual refreshes are serialized. Active publication is not canceled; queued
+# runs wait rather than racing over the same five-card set.
 concurrency:
   group: summary-cards-refresh-${{ github.repository }}
   queue: max
@@ -39,7 +39,7 @@ jobs:
           node-version: 24
 
       - name: Generate public dxnnystyles cards in runner temporary storage
-        uses: dxnnystyles/github-profile-summary-cards@c4381200d1eabe72d08bbafd2911c26cb0cddf03
+        uses: dxnnystyles/github-profile-summary-cards@179a08d62b489701d4e902495386d64367ea8003
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SUMMARY_CARDS_OUTPUT_PATH: ${{ runner.temp }}/summary-cards-v1-output
@@ -54,13 +54,13 @@ jobs:
         run: python3 scripts/verify_summary_cards.py --copy-to "$RUNNER_TEMP/summary-cards-verified"
         env:
           SUMMARY_CARDS_OUTPUT_PATH: ${{ runner.temp }}/summary-cards-v1-output
-          SUMMARY_CARDS_CANDIDATE_SHA: c4381200d1eabe72d08bbafd2911c26cb0cddf03
+          SUMMARY_CARDS_CANDIDATE_SHA: 179a08d62b489701d4e902495386d64367ea8003
 
       - name: Upload the complete validated card set
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: summary-cards-${{ github.run_id }}
-          path: ${{ runner.temp }}/summary-cards-verified/*.svg
+          path: ${{ runner.temp }}/summary-cards-verified/
           if-no-files-found: error
           retention-days: 1
 
@@ -69,15 +69,12 @@ jobs:
     if: ${{ needs.generate.result == 'success' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 8
+    # GitHub permissions are job-scoped, not step-scoped. No generator executes
+    # in this job; checkout credentials are not persisted, the artifact is data,
+    # and the token is explicitly passed only to the final push step.
     permissions:
       contents: write
     steps:
-      - name: Check out the unchanged profile baseline
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-        with:
-          ref: main
-          fetch-depth: 0
-
       - name: Download only this run's validated artifact
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
@@ -85,14 +82,52 @@ jobs:
           path: ${{ runner.temp }}/summary-cards-verified
           digest-mismatch: error
 
-      - name: Revalidate the complete set before any profile write
-        run: python3 scripts/verify_summary_cards.py --directory "$VERIFIED_CARDS_DIR" --no-copy
+      - name: Revalidate the complete set and prepare a credential-free commit
+        id: prepare
+        run: |
+          set -euo pipefail
+          git clone --no-tags --single-branch --branch main "https://github.com/$GITHUB_REPOSITORY.git" "$RUNNER_TEMP/summary-cards-publisher"
+          cd "$RUNNER_TEMP/summary-cards-publisher"
+          if [ "$(git rev-parse HEAD)" != "$BASELINE_SHA" ]; then
+            echo "Profile main changed during generation; refusing stale publication." >&2
+            exit 1
+          fi
+          python3 scripts/verify_summary_cards.py --directory "$VERIFIED_CARDS_DIR" --no-copy
+          python3 scripts/publish_summary_cards.py
         env:
           VERIFIED_CARDS_DIR: ${{ runner.temp }}/summary-cards-verified
-          SUMMARY_CARDS_CANDIDATE_SHA: c4381200d1eabe72d08bbafd2911c26cb0cddf03
+          SUMMARY_CARDS_CANDIDATE_SHA: 179a08d62b489701d4e902495386d64367ea8003
+          BASELINE_SHA: ${{ needs.generate.outputs.baseline_sha }}
+          RUNNER_TEMP: ${{ runner.temp }}
 
-      - name: Commit and push only the complete card update
-        run: python3 scripts/publish_summary_cards.py
+      - name: Push the prepared complete card update
+        if: steps.prepare.outputs.has_changes == 'true'
+        working-directory: ${{ runner.temp }}/summary-cards-publisher
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/git-askpass.sh" <<'EOF'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s' "$GITHUB_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          EOF
+          chmod 700 "$RUNNER_TEMP/git-askpass.sh"
+          GIT_ASKPASS="$RUNNER_TEMP/git-askpass.sh" GIT_TERMINAL_PROMPT=0 \
+            git push "https://github.com/$GITHUB_REPOSITORY.git" HEAD:main
+
+      - name: Verify the prepared commit is now the remote baseline
+        if: steps.prepare.outputs.has_changes == 'true'
+        working-directory: ${{ runner.temp }}/summary-cards-publisher
+        run: |
+          set -euo pipefail
+          expected="$(git rev-parse HEAD)"
+          observed="$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/main | cut -f1)"
+          test -n "$observed" && test "$observed" = "$expected"
+          echo "PASS remote main points to the fully validated five-card commit $expected"
         env:
           BASELINE_SHA: ${{ needs.generate.outputs.baseline_sha }}
           VERIFIED_CARDS_DIR: ${{ runner.temp }}/summary-cards-verified
