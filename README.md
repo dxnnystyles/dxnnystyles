@@ -18,7 +18,7 @@
 <sub>🇺🇸 English &nbsp; · &nbsp; 🇫🇷 Français · Learning</sub></p>
 
 <h2 align="center">GitHub Activity</h2>
-<!-- profile-snapshot-date: 2026-10-28 -->
+<!-- profile-snapshot-date: 2026-10-29 -->
 <p align="center"><img src="assets/summary-cards/0-profile-details.svg" width="700" alt="GitHub Profile Details for dxnnystyles: all-time contributions, original public repositories with forks excluded, and account age. Contact fields are omitted; this card has no contribution chart."></p>
 
 <p align="center"><img src="assets/hoops/hoops-profile-dark-panel.svg" width="720" alt="Hoops animation of public GitHub contribution activity for dxnnystyles, shown on a fixed charcoal panel."></p>
