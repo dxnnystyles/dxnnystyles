@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 
 from scripts.prepare_3d_contribution import (
     ASSET_NAME,
+    expected_calendar_cells,
     prepare,
     publish,
     readme_alt,
@@ -37,16 +38,25 @@ class ThreeDRefreshTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def make_artifact(self, source: Path = SOURCE, end: date = date(2026, 11, 4)) -> None:
-        prepare(source, self.artifact, end)
+    def generated_fixture(self, end: date = date(2026, 11, 4)) -> Path:
+        root = ET.parse(SOURCE).getroot()
+        count = len([n for n in root.iter() if n.tag.endswith("rect") and n.get("class", "").startswith("cont-top-")])
+        for _ in range(expected_calendar_cells(end) - count):
+            root.insert(2, ET.Element("{http://www.w3.org/2000/svg}rect", {"class": "cont-top-0"}))
+        fixture = self.root / "generated-fixture.svg"
+        ET.ElementTree(root).write(fixture, encoding="utf-8", xml_declaration=True)
+        return fixture
 
-    def test_prepares_exact_integrity_checked_365_day_artifact(self) -> None:
+    def make_artifact(self, source: Path | None = None, end: date = date(2026, 11, 4)) -> None:
+        prepare(source or self.generated_fixture(end), self.artifact, end)
+
+    def test_prepares_integrity_checked_calendar_with_expected_week_alignment(self) -> None:
         self.make_artifact()
         start, end, raw = validate_snapshot(self.artifact)
-        self.assertEqual((start, end), (date(2025, 11, 5), date(2026, 11, 4)))
+        self.assertEqual((start, end), (date(2025, 11, 4), date(2026, 11, 4)))
         self.assertEqual({path.name for path in self.artifact.iterdir()}, {ASSET_NAME, "snapshot.json"})
         self.assertEqual(hashlib.sha256(raw).hexdigest(), json.loads((self.artifact / "snapshot.json").read_text())["sha256"])
-        self.assertEqual(len([n for n in ET.fromstring(raw).iter() if n.tag.endswith("rect") and n.get("class", "").startswith("cont-top-")]), 365)
+        self.assertEqual(len([n for n in ET.fromstring(raw).iter() if n.tag.endswith("rect") and n.get("class", "").startswith("cont-top-")]), 368)
 
     def test_rejects_malformed_svg_and_missing_inactive_day_cell(self) -> None:
         malformed = self.root / "malformed.svg"
@@ -54,14 +64,22 @@ class ThreeDRefreshTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid 3D contribution SVG"):
             validate_svg(malformed)
 
-        root = ET.parse(SOURCE).getroot()
+        root = ET.parse(self.generated_fixture()).getroot()
         first_cell = next(n for n in root.iter() if n.tag.endswith("rect") and n.get("class") == "cont-top-0")
         parent = next(p for p in root.iter() if first_cell in list(p))
         parent.remove(first_cell)
         missing = self.root / "missing-day.svg"
         ET.ElementTree(root).write(missing, encoding="utf-8", xml_declaration=True)
-        with self.assertRaisesRegex(ValueError, "including inactive days"):
-            validate_svg(missing)
+        with self.assertRaisesRegex(ValueError, "contribution days"):
+            prepare(missing, self.root / "missing-output", date(2026, 11, 4))
+
+        root = ET.parse(self.generated_fixture()).getroot()
+        first_cell = next(n for n in root.iter() if n.tag.endswith("rect") and n.get("class") == "cont-top-0")
+        first_cell.set("class", "cont-top-1")
+        active_padding = self.root / "active-padding.svg"
+        ET.ElementTree(root).write(active_padding, encoding="utf-8", xml_declaration=True)
+        with self.assertRaisesRegex(ValueError, "before the rolling-year start"):
+            prepare(active_padding, self.root / "active-padding-output", date(2026, 11, 4))
 
     def test_rejects_corrupt_artifact_hash_or_unexpected_file(self) -> None:
         self.make_artifact()
@@ -76,17 +94,17 @@ class ThreeDRefreshTests(unittest.TestCase):
 
     def test_formats_accurate_utc_range_and_changes_only_target_image_alt(self) -> None:
         self.assertEqual(
-            readme_alt(date(2025, 11, 5), date(2026, 11, 4)),
-            "Neon Ember three-dimensional Night View of dxnnystyles public GitHub contributions for the trailing 365 days from November 5, 2025 through November 4, 2026 UTC. Snapshot updated November 4, 2026 UTC; inactive days are retained; not real time.",
+            readme_alt(date(2025, 11, 4), date(2026, 11, 4)),
+            "Neon Ember three-dimensional Night View of dxnnystyles public GitHub contributions for GitHub's rolling one-year window from November 4, 2025 through November 4, 2026 UTC. Week alignment can include adjacent inactive boundary cells. Snapshot updated November 4, 2026 UTC; not real time.",
         )
         original = (ROOT / "README.md").read_text(encoding="utf-8")
-        updated = replace_readme_alt(original, readme_alt(date(2025, 11, 5), date(2026, 11, 4)))
+        updated = replace_readme_alt(original, readme_alt(date(2025, 11, 4), date(2026, 11, 4)))
         self.assertEqual(updated.count("src=\"assets/3d/profile-night-view.svg\""), 1)
         normalize = lambda text: re.sub(r'(<img\s+src="assets/3d/profile-night-view\.svg"\s+width="640"\s+alt=")[^"]*(">)', r'\1\2', text)
         self.assertEqual(normalize(updated), normalize(original))
 
     def test_changed_asset_and_date_are_prepared_together_and_repeat_is_noop(self) -> None:
-        raw = SOURCE.read_bytes() + b"\n"
+        raw = self.generated_fixture().read_bytes() + b"\n"
         changed = self.root / ASSET_NAME
         changed.write_bytes(raw)
         self.make_artifact(changed)
@@ -94,7 +112,7 @@ class ThreeDRefreshTests(unittest.TestCase):
         published_asset = (self.repo / "assets/3d" / ASSET_NAME).read_bytes()
         published_readme = (self.repo / "README.md").read_text(encoding="utf-8")
         self.assertEqual(published_asset, raw)
-        self.assertIn("November 5, 2025 through November 4, 2026 UTC", published_readme)
+        self.assertIn("November 4, 2025 through November 4, 2026 UTC", published_readme)
         self.assertFalse(publish(self.artifact, self.repo))
         self.assertEqual((self.repo / "assets/3d" / ASSET_NAME).read_bytes(), published_asset)
         self.assertEqual((self.repo / "README.md").read_text(encoding="utf-8"), published_readme)

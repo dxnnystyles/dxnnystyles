@@ -85,7 +85,7 @@ def main() -> None:
     if "Profile snapshot · Updated" in readme:
         fail("the internal refresh date must not be displayed as a README caption")
     graph_match = re.search(
-        r'<img src="assets/3d/profile-night-view\.svg" width="640" alt="Neon Ember three-dimensional Night View of dxnnystyles public GitHub contributions for the trailing 365 days from ([^"]+) through ([^"]+) UTC\. Snapshot updated ([^"]+) UTC; inactive days are retained; not real time\."',
+        r'<img src="assets/3d/profile-night-view\.svg" width="640" alt="Neon Ember three-dimensional Night View of dxnnystyles public GitHub contributions for GitHub\'s rolling one-year window from ([^"]+) through ([^"]+) UTC\. Week alignment can include adjacent inactive boundary cells\. Snapshot updated ([^"]+) UTC; not real time\."',
         readme,
     )
     if graph_match:
@@ -95,8 +95,12 @@ def main() -> None:
             snapshot_end = datetime.strptime(graph_match.group(3), "%B %d, %Y").date()
         except ValueError:
             fail("the 3D graph README description must use valid calendar dates")
-        if (graph_end - graph_start).days != 364 or snapshot_end != graph_end:
-            fail("the 3D graph must describe the matching inclusive 365-day UTC window and snapshot date")
+        try:
+            expected_start = graph_end.replace(year=graph_end.year - 1)
+        except ValueError:
+            expected_start = graph_end.replace(year=graph_end.year - 1, month=2, day=28)
+        if graph_start != expected_start or snapshot_end != graph_end:
+            fail("the 3D graph must describe the matching rolling one-year UTC window and snapshot date")
     elif "assets/3d/profile-night-view.svg" in readme and not re.search(
         r'<img src="assets/3d/profile-night-view\.svg" width="640" alt="Neon Ember three-dimensional Night View of dxnnystyles public contributions from [A-Za-z]+ \d{1,2}, \d{4} through [A-Za-z]+ \d{1,2}, \d{4}\. Snapshot updated [A-Za-z]+ \d{1,2}, \d{4}; not real time\."',
         readme,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import date, timedelta
+from datetime import date
 import hashlib
 import json
 from pathlib import Path
@@ -57,8 +57,8 @@ def validate_svg(path: Path) -> bytes:
         node for node in root.iter(f"{TAG}rect")
         if re.fullmatch(r"cont-top-[0-4]", node.get("class", ""))
     ]
-    if len(day_faces) != 365:
-        raise ValueError(f"expected all 365 daily contribution cells, including inactive days; found {len(day_faces)}")
+    if not 365 <= len(day_faces) <= 371:
+        raise ValueError(f"expected a complete rolling-year calendar including inactive boundary cells; found {len(day_faces)}")
     if sum(1 for node in root.iter() if node.tag in (f"{TAG}animate", f"{TAG}animateTransform")) < 1:
         raise ValueError("3D SVG is missing the approved contribution animation")
     return raw
@@ -68,11 +68,26 @@ def format_day(value: date) -> str:
     return f"{value.strftime('%B')} {value.day}, {value.year}"
 
 
+def one_year_before(value: date) -> date:
+    try:
+        return value.replace(year=value.year - 1)
+    except ValueError:
+        return value.replace(year=value.year - 1, month=2, day=28)
+
+
+def expected_calendar_cells(end: date) -> int:
+    start = one_year_before(end)
+    # GitHub starts the calendar on Sunday and includes leading cells before
+    # the exact `from` boundary to preserve its week alignment.
+    leading_alignment_days = (start.weekday() + 1) % 7
+    return (end - start).days + 1 + leading_alignment_days
+
+
 def readme_alt(start: date, end: date) -> str:
     return (
         "Neon Ember three-dimensional Night View of dxnnystyles public GitHub contributions "
-        f"for the trailing 365 days from {format_day(start)} through {format_day(end)} UTC. "
-        f"Snapshot updated {format_day(end)} UTC; inactive days are retained; not real time."
+        f"for GitHub's rolling one-year window from {format_day(start)} through {format_day(end)} UTC. "
+        f"Week alignment can include adjacent inactive boundary cells. Snapshot updated {format_day(end)} UTC; not real time."
     )
 
 
@@ -101,9 +116,21 @@ def validate_snapshot(directory: Path) -> tuple[date, date, bytes]:
         end = date.fromisoformat(metadata["end_date"])
     except (TypeError, ValueError) as error:
         raise ValueError("3D snapshot metadata contains invalid UTC dates") from error
-    if (end - start).days != 364:
-        raise ValueError("3D snapshot must describe an inclusive 365-day window")
+    if start != one_year_before(end):
+        raise ValueError("3D snapshot range must match GitHub's rolling one-year query")
     raw = validate_svg(directory / ASSET_NAME)
+    root = ET.fromstring(raw)
+    day_faces = [
+        node for node in root.iter(f"{TAG}rect")
+        if re.fullmatch(r"cont-top-[0-4]", node.get("class", ""))
+    ]
+    if len(day_faces) != expected_calendar_cells(end):
+        raise ValueError(
+            "3D calendar cell count does not match the rolling-year window and GitHub's leading week alignment"
+        )
+    leading_alignment_days = (start.weekday() + 1) % 7
+    if any(node.get("class") != "cont-top-0" for node in day_faces[:leading_alignment_days]):
+        raise ValueError("GitHub week-alignment cells before the rolling-year start must remain inactive")
     if hashlib.sha256(raw).hexdigest() != metadata["sha256"]:
         raise ValueError("3D SVG integrity hash does not match the transferred metadata")
     return start, end, raw
@@ -111,7 +138,20 @@ def validate_snapshot(directory: Path) -> tuple[date, date, bytes]:
 
 def prepare(source: Path, output: Path, end: date) -> None:
     raw = validate_svg(source)
-    start = end - timedelta(days=364)
+    root = ET.fromstring(raw)
+    day_faces = [
+        node for node in root.iter(f"{TAG}rect")
+        if re.fullmatch(r"cont-top-[0-4]", node.get("class", ""))
+    ]
+    expected_cells = expected_calendar_cells(end)
+    if len(day_faces) != expected_cells:
+        raise ValueError(
+            f"expected {expected_cells} contribution days for this UTC window including GitHub week alignment; found {len(day_faces)}"
+        )
+    start = one_year_before(end)
+    leading_alignment_days = (start.weekday() + 1) % 7
+    if any(node.get("class") != "cont-top-0" for node in day_faces[:leading_alignment_days]):
+        raise ValueError("GitHub week-alignment cells before the rolling-year start must remain inactive")
     output.mkdir(parents=True, exist_ok=False)
     (output / ASSET_NAME).write_bytes(raw)
     metadata = {
