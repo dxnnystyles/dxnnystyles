@@ -1,0 +1,140 @@
+name: Refresh Neon Ember 3D contributions
+
+on:
+  schedule:
+    - cron: '45 6 * * *'
+  workflow_dispatch:
+
+# Separate runs cannot race to publish a graph and its README description.
+concurrency:
+  group: 3d-contributions-refresh-${{ github.repository }}
+  queue: max
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  generate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      baseline_sha: ${{ steps.snapshot.outputs.sha }}
+      snapshot_date: ${{ steps.snapshot.outputs.date }}
+    steps:
+      - name: Check out the production baseline without write credentials
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Record the baseline and UTC snapshot day
+        id: snapshot
+        run: |
+          set -euo pipefail
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate the authentic public graph with the pinned upstream generator
+        uses: yoshi389111/github-profile-3d-contrib@e235d118909be71eb7edb05482a3de4e76156df3
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          USERNAME: dxnnystyles
+          SETTING_JSON: assets/3d/profile-night-view-settings.json
+
+      - name: Validate the complete rolling-year graph and prepare an integrity-checked artifact
+        run: |
+          set -euo pipefail
+          test "$(date -u +%F)" = "$SNAPSHOT_DATE" || { echo 'UTC day changed during generation; refusing an imprecise snapshot date.' >&2; exit 1; }
+          python3 scripts/prepare_3d_contribution.py prepare \
+            --source profile-3d-contrib/profile-night-view.svg \
+            --output "$RUNNER_TEMP/3d-contribution-verified" \
+            --end-date "$SNAPSHOT_DATE"
+          python3 scripts/prepare_3d_contribution.py validate \
+            --directory "$RUNNER_TEMP/3d-contribution-verified"
+        env:
+          SNAPSHOT_DATE: ${{ steps.snapshot.outputs.date }}
+
+      - name: Upload the validated SVG and matching UTC range metadata
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: 3d-contribution-${{ github.run_id }}
+          path: ${{ runner.temp }}/3d-contribution-verified/
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: generate
+    if: ${{ needs.generate.result == 'success' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: write
+    steps:
+      - name: Download this run's verified graph artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: 3d-contribution-${{ github.run_id }}
+          path: ${{ runner.temp }}/3d-contribution-verified
+          digest-mismatch: error
+
+      - name: Revalidate and prepare the graph plus README description
+        id: prepare
+        run: |
+          set -euo pipefail
+          git clone --no-tags --single-branch --branch main "https://github.com/$GITHUB_REPOSITORY.git" "$RUNNER_TEMP/3d-publisher"
+          cd "$RUNNER_TEMP/3d-publisher"
+          if [ "$(git rev-parse HEAD)" != "$BASELINE_SHA" ]; then
+            echo 'Profile main changed during generation; refusing stale publication.' >&2
+            exit 1
+          fi
+          python3 scripts/prepare_3d_contribution.py publish \
+            --directory "$RUNNER_TEMP/3d-contribution-verified" \
+            --repo "$RUNNER_TEMP/3d-publisher"
+          git add -- README.md assets/3d/profile-night-view.svg
+          changed="$(git diff --cached --name-only)"
+          if [ -n "$changed" ]; then
+            expected=$'README.md\nassets/3d/profile-night-view.svg'
+            test "$changed" = "$expected" || { echo "Unexpected staged files: $changed" >&2; exit 1; }
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m 'Refresh Neon Ember 3D contribution graph'
+            echo 'has_changes=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'has_changes=false' >> "$GITHUB_OUTPUT"
+            echo 'Graph output unchanged; no commit will be created.'
+          fi
+        env:
+          BASELINE_SHA: ${{ needs.generate.outputs.baseline_sha }}
+          RUNNER_TEMP: ${{ runner.temp }}
+
+      - name: Push the prepared 3D graph update
+        if: steps.prepare.outputs.has_changes == 'true'
+        working-directory: ${{ runner.temp }}/3d-publisher
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/git-askpass.sh" <<'EOF'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s' "$GITHUB_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          EOF
+          chmod 700 "$RUNNER_TEMP/git-askpass.sh"
+          GIT_ASKPASS="$RUNNER_TEMP/git-askpass.sh" GIT_TERMINAL_PROMPT=0 \
+            git push "https://github.com/$GITHUB_REPOSITORY.git" HEAD:main
+
+      - name: Verify the prepared commit is now the remote baseline
+        if: steps.prepare.outputs.has_changes == 'true'
+        working-directory: ${{ runner.temp }}/3d-publisher
+        run: |
+          set -euo pipefail
+          expected="$(git rev-parse HEAD)"
+          observed="$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/main | cut -f1)"
+          test -n "$observed" && test "$observed" = "$expected"
+          echo "PASS remote main points to the validated 3D graph and README commit $expected"

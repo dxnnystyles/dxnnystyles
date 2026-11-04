@@ -6,6 +6,7 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 import argparse
+from datetime import datetime
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -40,7 +41,7 @@ ASSETS = {
     )),
     *(f"assets/tech/{name}.svg" for name in TECH),
 }
-ALLOWED = {".gitignore", "README.md", "scripts/check_readme.py", "scripts/summary_card_date.py", "scripts/verify_summary_cards.py", "scripts/publish_summary_cards.py", "scripts/prepare_hoops_assets.py", ".github/workflows/update-hoops.yml", ".github/workflows/update-summary-cards.yml", "tests/test_summary_card_refresh.py", "tests/test_hoops_refresh.py", *ASSETS}
+ALLOWED = {".gitignore", "README.md", "scripts/check_readme.py", "scripts/summary_card_date.py", "scripts/verify_summary_cards.py", "scripts/publish_summary_cards.py", "scripts/prepare_hoops_assets.py", "scripts/prepare_3d_contribution.py", ".github/workflows/update-hoops.yml", ".github/workflows/update-summary-cards.yml", ".github/workflows/update-3d-contributions.yml", "tests/test_summary_card_refresh.py", "tests/test_hoops_refresh.py", "tests/test_3d_contribution_refresh.py", "assets/3d/profile-night-view-settings.json", *ASSETS}
 
 class Markup(HTMLParser):
     def __init__(self) -> None:
@@ -83,6 +84,24 @@ def main() -> None:
         fail("the internal snapshot marker is not initialized; it is added after a successful complete refresh")
     if "Profile snapshot · Updated" in readme:
         fail("the internal refresh date must not be displayed as a README caption")
+    graph_match = re.search(
+        r'<img src="assets/3d/profile-night-view\.svg" width="640" alt="Neon Ember three-dimensional Night View of dxnnystyles public GitHub contributions for the trailing 365 days from ([^"]+) through ([^"]+) UTC\. Snapshot updated ([^"]+) UTC; inactive days are retained; not real time\."',
+        readme,
+    )
+    if graph_match:
+        try:
+            graph_start = datetime.strptime(graph_match.group(1), "%B %d, %Y").date()
+            graph_end = datetime.strptime(graph_match.group(2), "%B %d, %Y").date()
+            snapshot_end = datetime.strptime(graph_match.group(3), "%B %d, %Y").date()
+        except ValueError:
+            fail("the 3D graph README description must use valid calendar dates")
+        if (graph_end - graph_start).days != 364 or snapshot_end != graph_end:
+            fail("the 3D graph must describe the matching inclusive 365-day UTC window and snapshot date")
+    elif "assets/3d/profile-night-view.svg" in readme and not re.search(
+        r'<img src="assets/3d/profile-night-view\.svg" width="640" alt="Neon Ember three-dimensional Night View of dxnnystyles public contributions from [A-Za-z]+ \d{1,2}, \d{4} through [A-Za-z]+ \d{1,2}, \d{4}\. Snapshot updated [A-Za-z]+ \d{1,2}, \d{4}; not real time\."',
+        readme,
+    ):
+        fail("the 3D graph must keep its dated rolling-window accessibility description")
     visible=VisibleText(); visible.feed(readme)
     if "profile-snapshot-date:" in "".join(visible.parts):
         fail("the internal snapshot marker must remain an HTML comment, not visible profile text")
