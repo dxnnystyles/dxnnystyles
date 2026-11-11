@@ -23,7 +23,7 @@
 
 <p align="center"><img src="assets/hoops/hoops-profile-dark-panel.svg" width="720" alt="Hoops animation of public GitHub contribution activity for dxnnystyles, shown on a fixed charcoal panel."></p>
 
-<p align="center"><img src="assets/3d/profile-night-view.svg" width="640" alt="Neon Ember three-dimensional Night View of dxnnystyles public GitHub contributions for GitHub's rolling one-year window from November 10, 2025 through November 10, 2026 UTC. Week alignment can include adjacent inactive boundary cells. Snapshot updated November 10, 2026 UTC; not real time."></p>
+<p align="center"><img src="assets/3d/profile-night-view.svg" width="640" alt="Neon Ember three-dimensional Night View of dxnnystyles public GitHub contributions for GitHub's rolling one-year window from November 11, 2025 through November 11, 2026 UTC. Week alignment can include adjacent inactive boundary cells. Snapshot updated November 11, 2026 UTC; not real time."></p>
 
 <h2 align="center">Stats</h2>
 <p align="center"><img src="assets/summary-cards/3-stats.svg" width="340" alt="GitHub Stats: public stars, commits, pull requests, issues, and repositories contributed to. Values reflect the most recent successful refresh."> <img src="assets/summary-cards/1-repos-per-language.svg" width="340" alt="Repositories per Language: language categories across public repositories. Values reflect the most recent successful refresh."></p>
